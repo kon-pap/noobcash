@@ -1,11 +1,18 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/kon-pap/noobcash/pkg/node"
+	"github.com/kon-pap/noobcash/pkg/env"
+	"github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
+const dotenvPath string = "./config/node.env"
+
 func main() {
-	fmt.Println("Hello, World from node", node.Add(1, 2))
+	env.Import(dotenvPath)
+	walletPath := env.Get("WALLET_PATH")
+
+	wallet := backend.CreateWallet("first", 1024)
+	wallet.WritePEM(walletPath)
+
+	// fmt.Println(env.Get("BOOTSTRAP_NODE_IP"))
 }
