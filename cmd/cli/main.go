@@ -1,9 +1,7 @@
 package main
 
-import (
-	"fmt"
-)
+import "github.com/kon-pap/noobcash/pkg/cli"
 
 func main() {
-	fmt.Println("Hello, world from cli!")
+	cli.Execute()
 }
