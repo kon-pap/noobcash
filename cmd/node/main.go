@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/kon-pap/noobcash/pkg/env"
 	"github.com/kon-pap/noobcash/pkg/node/backend"
 )
@@ -11,8 +13,8 @@ func main() {
 	env.Import(dotenvPath)
 	walletPath := env.Get("WALLET_PATH")
 
-	wallet := backend.CreateWallet("first", 1024)
-	wallet.WritePEM(walletPath)
+	wallet := backend.LoadWallet(walletPath, "first")
+	fmt.Println(wallet.PrivKey.D.Bytes())
 
 	// fmt.Println(env.Get("BOOTSTRAP_NODE_IP"))
 }
