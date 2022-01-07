@@ -11,11 +11,12 @@ import (
 )
 
 type Wallet struct {
+	Balance int
 	PrivKey *rsa.PrivateKey
 	PubKey  *rsa.PublicKey
 }
 
-func GenerateWallet(id string, bits int) Wallet {
+func NewWallet(id string, bits int) Wallet {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		fmt.Print(err)
@@ -102,7 +103,8 @@ func LoadWallet(path string) Wallet {
 	}
 }
 
-// func (w Wallet) createTx(amount int, address *rsa.PublicKey) (Transaction, error) {
+// func (w Wallet) CreateTx(amount int, address *rsa.PublicKey) (Transaction, error) {
 // }
-// func (w Wallet) signTx(tx Transaction) error {
+// func (w Wallet) SignTx(tx Transaction) error {
 // }
+// no need for Balance method, because it is already in the Wallet struct

@@ -2,22 +2,31 @@ package backend
 
 import "crypto/rsa"
 
+type TxIn struct {
+	previousOutputId string
+}
+
+// func NewTxIn() TxIn {
+// }
+
+type TxOut struct {
+	id            string
+	transactionId string
+	amount        int
+}
+
+// func NewTxOut() TxOut {
+// }
+
 type Transaction struct {
 	senderAddress   *rsa.PublicKey
 	receiverAddress *rsa.PublicKey
 	amount          int
 	id              string
-	inputs          *[]TransactionInput
-	outputs         *[]TransactionOutput
+	inputs          []TxIn
+	outputs         []TxOut
 	signature       string
 }
 
-type TransactionInput struct {
-	previousOutputId string
-}
-
-type TransactionOutput struct {
-	id            string
-	transactionId string
-	amount        int
-}
+// func NewTransaction() *Transaction {
+// }
