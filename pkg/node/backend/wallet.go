@@ -16,7 +16,7 @@ type Wallet struct {
 	PubKey  *rsa.PublicKey
 }
 
-func CreateWallet(id string, bits int) Wallet {
+func GenerateWallet(id string, bits int) Wallet {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		fmt.Print(err)
@@ -103,4 +103,8 @@ func LoadWallet(path, id string) Wallet {
 		PrivKey: privateKey,
 		PubKey:  publicKey,
 	}
+}
+
+func (w Wallet) signTransaction(amount int, address *rsa.PublicKey) Transaction {
+
 }
