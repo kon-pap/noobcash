@@ -11,7 +11,6 @@ import (
 )
 
 type Wallet struct {
-	id      string
 	PrivKey *rsa.PrivateKey
 	PubKey  *rsa.PublicKey
 }
@@ -24,14 +23,13 @@ func GenerateWallet(id string, bits int) Wallet {
 	}
 	publicKey := privateKey.PublicKey
 	return Wallet{
-		id:      id,
 		PrivKey: privateKey,
 		PubKey:  &publicKey,
 	}
 }
 
 func (w Wallet) SaveWallet(path string) {
-	fullKeyPath := path + "/" + w.id
+	fullKeyPath := path
 	os.MkdirAll(fullKeyPath, 0755)
 
 	privateKeyBytes := x509.MarshalPKCS1PrivateKey(w.PrivKey)
@@ -66,8 +64,8 @@ func (w Wallet) SaveWallet(path string) {
 	}
 }
 
-func LoadWallet(path, id string) Wallet {
-	fullKeyPath := path + "/" + id
+func LoadWallet(path string) Wallet {
+	fullKeyPath := path
 	privateKeyBytes, err := ioutil.ReadFile(fullKeyPath + "/private.pem")
 	if err != nil {
 		fmt.Print(err)
@@ -99,12 +97,12 @@ func LoadWallet(path, id string) Wallet {
 		os.Exit(1)
 	}
 	return Wallet{
-		id:      id,
 		PrivKey: privateKey,
 		PubKey:  publicKey,
 	}
 }
 
-func (w Wallet) signTransaction(amount int, address *rsa.PublicKey) Transaction {
-
-}
+// func (w Wallet) createTx(amount int, address *rsa.PublicKey) (Transaction, error) {
+// }
+// func (w Wallet) signTx(tx Transaction) error {
+// }

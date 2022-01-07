@@ -13,7 +13,7 @@ func main() {
 	env.Import(dotenvPath)
 	walletPath := env.Get("WALLET_PATH")
 
-	wallet := backend.LoadWallet(walletPath, "first")
+	wallet := backend.LoadWallet(walletPath + "/first")
 	fmt.Println(wallet.PrivKey.D.Bytes())
 
 	// fmt.Println(env.Get("BOOTSTRAP_NODE_IP"))

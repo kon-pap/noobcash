@@ -15,6 +15,6 @@ type Block struct {
 	previousHash string
 }
 
-func createGenesisBlock(n int) Block {
+// func createGenesisBlock(n int) Block {
 
-}
+// }
