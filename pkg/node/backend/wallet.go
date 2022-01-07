@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
@@ -28,37 +29,107 @@ func NewWallet(id string, bits int) Wallet {
 		PubKey:  &publicKey,
 	}
 }
+func (w Wallet) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Balance int
+		PubKey  string
+		PrivKey string
+	}{
+		Balance: w.Balance,
+		PubKey:  w.PubKeyToPem(),
+		PrivKey: w.PrivKeyToPem(),
+	})
+}
+func (w *Wallet) UnmarshalJSON(data []byte) error {
+	var wallet struct {
+		Balance int
+		PubKey  string
+		PrivKey string
+	}
+	err := json.Unmarshal(data, &wallet)
+	if err != nil {
+		return err
+	}
+	w.Balance = wallet.Balance
+	w.PubKey = PubKeyFromPem(wallet.PubKey)
+	w.PrivKey = PrivKeyFromPem(wallet.PrivKey)
+	return nil
+}
 
-func (w Wallet) SaveWallet(path string) {
-	fullKeyPath := path
-	os.MkdirAll(fullKeyPath, 0755)
+func (w Wallet) String() string {
+	strBytes, err := (json.Marshal(w))
+	if err != nil {
+		fmt.Print(err)
+		os.Exit(1)
+	}
+	return string(strBytes)
+}
 
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(w.PrivKey)
-	privateKeyBlock := &pem.Block{
+func (w Wallet) PrivKeyToPem() string {
+	privKeyBytes := x509.MarshalPKCS1PrivateKey(w.PrivKey)
+	privKeyBlock := pem.Block{
 		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
+		Bytes: privKeyBytes,
 	}
-	privatePemFile, err := os.Create(fullKeyPath + "/private.pem")
+	return string(pem.EncodeToMemory(&privKeyBlock))
+}
+func PrivKeyFromPem(s string) *rsa.PrivateKey {
+	block, _ := pem.Decode([]byte(s))
+	if block == nil {
+		fmt.Println("Failed to decode PEM block containing the key")
+		os.Exit(1)
+	}
+	if block.Type != "RSA PRIVATE KEY" {
+		fmt.Println("RSA private key is of the wrong type", block.Type)
+		os.Exit(1)
+	}
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(1)
 	}
-	err = pem.Encode(privatePemFile, privateKeyBlock)
-	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
-	}
+	return key
+}
+
+func (w Wallet) PubKeyToPem() string {
 	publicKeyBytes := x509.MarshalPKCS1PublicKey(w.PubKey)
 	publicKeyBlock := &pem.Block{
 		Type:  "RSA PUBLIC KEY",
 		Bytes: publicKeyBytes,
 	}
-	publicPemFile, err := os.Create(fullKeyPath + "/public.pem")
+	return string(pem.EncodeToMemory(publicKeyBlock))
+}
+func PubKeyFromPem(s string) *rsa.PublicKey {
+	block, _ := pem.Decode([]byte(s))
+	if block == nil {
+		fmt.Println("Failed to decode PEM block containing the key")
+		os.Exit(1)
+	}
+	if block.Type != "RSA PUBLIC KEY" {
+		fmt.Println("RSA public key is of the wrong type", block.Type)
+		os.Exit(1)
+	}
+	key, err := x509.ParsePKCS1PublicKey(block.Bytes)
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(1)
 	}
-	err = pem.Encode(publicPemFile, publicKeyBlock)
+	return key
+}
+
+func (w Wallet) SaveWallet(path string) {
+	fullKeyPath := path
+	os.MkdirAll(fullKeyPath, 0755)
+
+	privateKeyPem := w.PrivKeyToPem()
+	err := ioutil.WriteFile(fullKeyPath+"/private.pem", []byte(privateKeyPem), 0644)
+	if err != nil {
+		fmt.Print(err)
+		os.Exit(1)
+	}
+
+	publicKeyPem := w.PubKeyToPem()
+	err = ioutil.WriteFile(fullKeyPath+"/public.pem", []byte(publicKeyPem), 0644)
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(1)
@@ -72,31 +143,15 @@ func LoadWallet(path string) Wallet {
 		fmt.Print(err)
 		os.Exit(1)
 	}
-	privateKeyBlock, _ := pem.Decode(privateKeyBytes)
-	if privateKeyBlock.Type != "RSA PRIVATE KEY" {
-		fmt.Println("RSA private key is of the wrong type", privateKeyBlock.Type)
-		os.Exit(1)
-	}
-	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyBlock.Bytes)
-	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
-	}
+	privateKey := PrivKeyFromPem(string(privateKeyBytes))
+
 	publicKeyBytes, err := ioutil.ReadFile(fullKeyPath + "/public.pem")
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(1)
 	}
-	publicKeyBlock, _ := pem.Decode(publicKeyBytes)
-	if publicKeyBlock.Type != "RSA PUBLIC KEY" {
-		fmt.Println("RSA public key is of the wrong type", publicKeyBlock.Type)
-		os.Exit(1)
-	}
-	publicKey, err := x509.ParsePKCS1PublicKey(publicKeyBlock.Bytes)
-	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
-	}
+	publicKey := PubKeyFromPem(string(publicKeyBytes))
+
 	return Wallet{
 		PrivKey: privateKey,
 		PubKey:  publicKey,
@@ -105,6 +160,7 @@ func LoadWallet(path string) Wallet {
 
 // func (w Wallet) CreateTx(amount int, address *rsa.PublicKey) (Transaction, error) {
 // }
+
 // func (w Wallet) SignTx(tx Transaction) error {
 // }
 // no need for Balance method, because it is already in the Wallet struct
