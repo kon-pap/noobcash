@@ -1,62 +1,63 @@
 package backend
 
 import (
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 )
 
 type Wallet struct {
 	Balance int
 	PrivKey *rsa.PrivateKey
-	PubKey  *rsa.PublicKey
+	Utxos   []TxOut
+}
+type walletJson struct {
+	Balance int
+	PrivKey string
+	Utxos   []TxOut
 }
 
-func NewWallet(id string, bits int) Wallet {
+func NewWallet(bits int) *Wallet {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(1)
 	}
-	publicKey := privateKey.PublicKey
-	return Wallet{
+	return &Wallet{
 		PrivKey: privateKey,
-		PubKey:  &publicKey,
+		Utxos:   []TxOut{},
 	}
 }
-func (w Wallet) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Balance int
-		PubKey  string
-		PrivKey string
-	}{
+
+////
+// Serialization and deserialization
+////
+
+func (w *Wallet) MarshalJSON() ([]byte, error) {
+	// TODO: Implement using Marshaler  of utxo
+	return json.Marshal(walletJson{
 		Balance: w.Balance,
-		PubKey:  w.PubKeyToPem(),
-		PrivKey: w.PrivKeyToPem(),
+		PrivKey: PrivKeyToPem(w.PrivKey),
+		Utxos:   w.Utxos,
 	})
 }
 func (w *Wallet) UnmarshalJSON(data []byte) error {
-	var wallet struct {
-		Balance int
-		PubKey  string
-		PrivKey string
-	}
-	err := json.Unmarshal(data, &wallet)
+	var walletTmp walletJson
+	err := json.Unmarshal(data, &walletTmp)
 	if err != nil {
 		return err
 	}
-	w.Balance = wallet.Balance
-	w.PubKey = PubKeyFromPem(wallet.PubKey)
-	w.PrivKey = PrivKeyFromPem(wallet.PrivKey)
+	w.Balance = walletTmp.Balance
+	w.PrivKey = PrivKeyFromPem(walletTmp.PrivKey)
+	w.Utxos = walletTmp.Utxos
 	return nil
 }
-
-func (w Wallet) String() string {
+func (w *Wallet) String() string {
 	strBytes, err := (json.Marshal(w))
 	if err != nil {
 		fmt.Print(err)
@@ -65,8 +66,8 @@ func (w Wallet) String() string {
 	return string(strBytes)
 }
 
-func (w Wallet) PrivKeyToPem() string {
-	privKeyBytes := x509.MarshalPKCS1PrivateKey(w.PrivKey)
+func PrivKeyToPem(privKey *rsa.PrivateKey) string {
+	privKeyBytes := x509.MarshalPKCS1PrivateKey(privKey)
 	privKeyBlock := pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: privKeyBytes,
@@ -90,9 +91,8 @@ func PrivKeyFromPem(s string) *rsa.PrivateKey {
 	}
 	return key
 }
-
-func (w Wallet) PubKeyToPem() string {
-	publicKeyBytes := x509.MarshalPKCS1PublicKey(w.PubKey)
+func PubKeyToPem(pubKey *rsa.PublicKey) string {
+	publicKeyBytes := x509.MarshalPKCS1PublicKey(pubKey)
 	publicKeyBlock := &pem.Block{
 		Type:  "RSA PUBLIC KEY",
 		Bytes: publicKeyBytes,
@@ -117,50 +117,49 @@ func PubKeyFromPem(s string) *rsa.PublicKey {
 	return key
 }
 
-func (w Wallet) SaveWallet(path string) {
-	fullKeyPath := path
-	os.MkdirAll(fullKeyPath, 0755)
+// func (w *Wallet) SaveWallet(path string) {
+// 	fullKeyPath := path
+// 	os.MkdirAll(fullKeyPath, 0755)
 
-	privateKeyPem := w.PrivKeyToPem()
-	err := ioutil.WriteFile(fullKeyPath+"/private.pem", []byte(privateKeyPem), 0644)
-	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
-	}
-
-	publicKeyPem := w.PubKeyToPem()
-	err = ioutil.WriteFile(fullKeyPath+"/public.pem", []byte(publicKeyPem), 0644)
-	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
-	}
-}
-
-func LoadWallet(path string) Wallet {
-	fullKeyPath := path
-	privateKeyBytes, err := ioutil.ReadFile(fullKeyPath + "/private.pem")
-	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
-	}
-	privateKey := PrivKeyFromPem(string(privateKeyBytes))
-
-	publicKeyBytes, err := ioutil.ReadFile(fullKeyPath + "/public.pem")
-	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
-	}
-	publicKey := PubKeyFromPem(string(publicKeyBytes))
-
-	return Wallet{
-		PrivKey: privateKey,
-		PubKey:  publicKey,
-	}
-}
-
-// func (w Wallet) CreateTx(amount int, address *rsa.PublicKey) (Transaction, error) {
+// 	privateKeyPem := w.PrivKeyToPem()
+// 	err := ioutil.WriteFile(fullKeyPath+"/private.pem", []byte(privateKeyPem), 0644)
+// 	if err != nil {
+// 		fmt.Print(err)
+// 		os.Exit(1)
+// 	}
+// }
+// func LoadWallet(path string) *Wallet {
+// 	fullKeyPath := path
+// 	privateKeyBytes, err := ioutil.ReadFile(fullKeyPath + "/private.pem")
+// 	if err != nil {
+// 		fmt.Print(err)
+// 		os.Exit(1)
+// 	}
+// 	privateKey := PrivKeyFromPem(string(privateKeyBytes))
+// 	return &Wallet{
+// 		PrivKey: privateKey,
+// 	}
 // }
 
-// func (w Wallet) SignTx(tx Transaction) error {
-// }
+func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, error) {
+	if amount > w.Balance {
+		return nil, fmt.Errorf("tried to send %d but only have %d", amount, w.Balance)
+	}
+	tx := NewTransaction(&w.PrivKey.PublicKey, address, amount, []TxIn{}, []TxOut{})
+	// TODO: coin selection to find utxos to use as TxIns
+	// TODO: add TxOut to target address, add TxOut to change address
+
+	tx.ComputeAndFillHash()
+	return tx, nil
+}
+
+func (w *Wallet) SignTx(tx *Transaction) error {
+	signature, err := rsa.SignPKCS1v15(rand.Reader, w.PrivKey, crypto.SHA256, tx.Id)
+	if err != nil {
+		return err
+	}
+	tx.Signature = signature
+	return nil
+}
+
 // no need for Balance method, because it is already in the Wallet struct
