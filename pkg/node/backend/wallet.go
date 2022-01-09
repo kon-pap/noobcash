@@ -34,17 +34,20 @@ func NewWallet(bits int) *Wallet {
 	}
 }
 
-////
-// Serialization and deserialization
-////
-
-func (w *Wallet) MarshalJSON() ([]byte, error) {
-	// TODO: Implement using Marshaler  of utxo
-	return json.Marshal(WalletInfo{
+func (w *Wallet) GetWalletInfo() *WalletInfo {
+	return &WalletInfo{
 		Balance: w.Balance,
 		PubKey:  PubKeyToPem(&w.PrivKey.PublicKey),
 		Utxos:   w.Utxos,
-	})
+	}
+}
+
+////
+// Serialization and deserialization
+////
+func (w *Wallet) MarshalJSON() ([]byte, error) {
+	// TODO: Implement using Marshaler  of utxo
+	return json.Marshal(w.GetWalletInfo())
 }
 
 func (w *Wallet) String() string {
