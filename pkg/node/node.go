@@ -4,17 +4,19 @@ import bck "github.com/kon-pap/noobcash/pkg/node/backend"
 
 type Node struct {
 	// chain, currBlockId, wallet, ring
-	Chain       []bck.Block
+	Chain       []*bck.Block
 	CurrBlockId int
 	Wallet      *bck.Wallet
-	Ring        []byte
+	Ring        map[string]*bck.WalletInfo
 }
 
 func NewNode(currBlockId int, bits int) *Node {
 	w := bck.NewWallet(bits)
+	getInfo := w.GetWalletInfo()
 	return &Node{
 		CurrBlockId: currBlockId,
 		Wallet:      w,
+		Ring:        map[string]*bck.WalletInfo{getInfo.PubKey: getInfo},
 	}
 }
 
