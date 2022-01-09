@@ -16,14 +16,14 @@ type Wallet struct {
 	PrivKey *rsa.PrivateKey
 	Utxos   []TxOut
 }
-type walletJson struct {
-	Balance int
-	PrivKey string
-	Utxos   []TxOut
+type WalletInfo struct {
+	Balance int     `json:"balance"`
+	PubKey  string  `json:"address"`
+	Utxos   []TxOut `json:"utxos"`
 }
 
 func NewWallet(bits int) *Wallet {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	privateKey, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(1)
@@ -40,23 +40,13 @@ func NewWallet(bits int) *Wallet {
 
 func (w *Wallet) MarshalJSON() ([]byte, error) {
 	// TODO: Implement using Marshaler  of utxo
-	return json.Marshal(walletJson{
+	return json.Marshal(WalletInfo{
 		Balance: w.Balance,
-		PrivKey: PrivKeyToPem(w.PrivKey),
+		PubKey:  PubKeyToPem(&w.PrivKey.PublicKey),
 		Utxos:   w.Utxos,
 	})
 }
-func (w *Wallet) UnmarshalJSON(data []byte) error {
-	var walletTmp walletJson
-	err := json.Unmarshal(data, &walletTmp)
-	if err != nil {
-		return err
-	}
-	w.Balance = walletTmp.Balance
-	w.PrivKey = PrivKeyFromPem(walletTmp.PrivKey)
-	w.Utxos = walletTmp.Utxos
-	return nil
-}
+
 func (w *Wallet) String() string {
 	strBytes, err := (json.Marshal(w))
 	if err != nil {
@@ -66,7 +56,19 @@ func (w *Wallet) String() string {
 	return string(strBytes)
 }
 
+func (w *WalletInfo) String() string {
+	strBytes, err := (json.Marshal(w))
+	if err != nil {
+		fmt.Print(err)
+		os.Exit(1)
+	}
+	return string(strBytes)
+}
+
 func PrivKeyToPem(privKey *rsa.PrivateKey) string {
+	if privKey == nil {
+		return "0"
+	}
 	privKeyBytes := x509.MarshalPKCS1PrivateKey(privKey)
 	privKeyBlock := pem.Block{
 		Type:  "RSA PRIVATE KEY",
@@ -75,6 +77,9 @@ func PrivKeyToPem(privKey *rsa.PrivateKey) string {
 	return string(pem.EncodeToMemory(&privKeyBlock))
 }
 func PrivKeyFromPem(s string) *rsa.PrivateKey {
+	if s == "0" {
+		return nil
+	}
 	block, _ := pem.Decode([]byte(s))
 	if block == nil {
 		fmt.Println("Failed to decode PEM block containing the key")
@@ -92,6 +97,9 @@ func PrivKeyFromPem(s string) *rsa.PrivateKey {
 	return key
 }
 func PubKeyToPem(pubKey *rsa.PublicKey) string {
+	if pubKey == nil {
+		return "0"
+	}
 	publicKeyBytes := x509.MarshalPKCS1PublicKey(pubKey)
 	publicKeyBlock := &pem.Block{
 		Type:  "RSA PUBLIC KEY",
@@ -100,6 +108,9 @@ func PubKeyToPem(pubKey *rsa.PublicKey) string {
 	return string(pem.EncodeToMemory(publicKeyBlock))
 }
 func PubKeyFromPem(s string) *rsa.PublicKey {
+	if s == "0" {
+		return nil
+	}
 	block, _ := pem.Decode([]byte(s))
 	if block == nil {
 		fmt.Println("Failed to decode PEM block containing the key")
@@ -145,7 +156,7 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 	if amount > w.Balance {
 		return nil, fmt.Errorf("tried to send %d but only have %d", amount, w.Balance)
 	}
-	tx := NewTransaction(&w.PrivKey.PublicKey, address, amount, []TxIn{}, []TxOut{})
+	tx := NewTransaction(&w.PrivKey.PublicKey, address, amount)
 	// TODO: coin selection to find utxos to use as TxIns
 	// TODO: add TxOut to target address, add TxOut to change address
 
