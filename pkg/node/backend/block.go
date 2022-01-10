@@ -17,11 +17,11 @@ type Block struct {
 	Timestamp    time.Time
 	Transactions []*Transaction
 	Nonce        string
-	CurrentHash  string
-	PreviousHash string
+	CurrentHash  []byte
+	PreviousHash []byte
 }
 
-func NewBlock(index int, prevHash string) *Block {
+func NewBlock(index int, prevHash []byte) *Block {
 	return &Block{
 		Index:        index,
 		Timestamp:    time.Now(),
@@ -43,8 +43,8 @@ func (b *Block) MarshalJSON() ([]byte, error) {
 		Timestamp:    b.Timestamp,
 		Transactions: b.Transactions,
 		Nonce:        b.Nonce,
-		CurrentHash:  b.CurrentHash,
-		PreviousHash: b.PreviousHash,
+		CurrentHash:  HexEncodeByteSlice(b.CurrentHash),
+		PreviousHash: HexEncodeByteSlice(b.PreviousHash),
 	})
 }
 
@@ -57,8 +57,8 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	b.Timestamp = blockJson.Timestamp
 	b.Transactions = blockJson.Transactions
 	b.Nonce = blockJson.Nonce
-	b.CurrentHash = blockJson.CurrentHash
-	b.PreviousHash = blockJson.PreviousHash
+	b.CurrentHash = HexDecodeByteSlice(blockJson.CurrentHash)
+	b.PreviousHash = HexDecodeByteSlice(blockJson.PreviousHash)
 	return nil
 }
 
@@ -72,7 +72,7 @@ func (b *Block) String() string {
 }
 
 func (b *Block) AddTx(tx *Transaction) error {
-	if blockCapacity == len(b.Transactions) {
+	if b.IsFull() {
 		return errors.New("Block is full")
 	}
 	b.Transactions = append(b.Transactions, tx)
@@ -81,6 +81,10 @@ func (b *Block) AddTx(tx *Transaction) error {
 
 func (b *Block) UpdateNonce(nonce string) {
 	b.Nonce = nonce
+}
+
+func (b *Block) IsFull() bool {
+	return blockCapacity == len(b.Transactions)
 }
 
 // This type will be used to create the currentHash of the block
@@ -94,7 +98,7 @@ func (b *Block) marshalJSONHash() ([]byte, error) {
 	return json.Marshal(blockJsonHash{
 		Timestamp:    b.Timestamp,
 		Nonce:        b.Nonce,
-		PreviousHash: b.PreviousHash,
+		PreviousHash: HexEncodeByteSlice(b.PreviousHash),
 	})
 }
 
@@ -105,5 +109,5 @@ func (b *Block) ComputeAndFillHash() {
 		os.Exit(1)
 	}
 	byteArray := (sha256.Sum256(txInfoBytes))
-	b.CurrentHash = string(byteArray[:])
+	b.CurrentHash = byteArray[:]
 }
