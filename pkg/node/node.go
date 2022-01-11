@@ -30,15 +30,6 @@ func (n *Node) IsValidSig(tx bck.Transaction) bool {
 	err := rsa.VerifyPKCS1v15(tx.SenderAddress, crypto.SHA256, tx.Id, tx.Signature)
 	return err == nil
 }
-func contains(utxos []bck.TxOut, txIn string) bool {
-	//check if a transaction is in UTXOS
-	for _, utx := range utxos {
-		if txIn == utx.TransactionId {
-			return true
-		}
-	}
-	return false
-}
 func (n *Node) IsValidTx(tx bck.Transaction) bool {
 	//The validation is consisted of 2 steps
 	//Step1: isValidSig
@@ -46,7 +37,7 @@ func (n *Node) IsValidTx(tx bck.Transaction) bool {
 	isValidSig := n.IsValidSig(tx) //Step1
 	txInputs := tx.Inputs
 	for _, i := range txInputs {
-		if !contains(n.Wallet.Utxos, i.PreviousOutputId) {
+		if _, ok := n.Wallet.Utxos[i.PreviousOutputId]; !ok {
 			return false
 		}
 	}
