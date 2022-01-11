@@ -35,9 +35,8 @@ func (n *Node) IsValidTx(tx bck.Transaction) bool {
 	//Step1: isValidSig
 	//Step2: check transaction inputs/outputs
 	isValidSig := n.IsValidSig(tx) //Step1
-	txInputs := tx.Inputs
-	for _, i := range txInputs {
-		if _, ok := n.Wallet.Utxos[i.PreviousOutputId]; !ok {
+	for txInId := range tx.Inputs {
+		if _, ok := n.Wallet.Utxos[string(txInId)]; !ok {
 			return false
 		}
 	}

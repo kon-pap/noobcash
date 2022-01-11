@@ -6,11 +6,23 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 )
 
-type TxIn struct {
-	PreviousOutputId string
+type InputId string
+type InputSetTy map[InputId]struct{}
+
+func (set InputSetTy) Add(inputId string) {
+	set[InputId(inputId)] = struct{}{}
+}
+func (set InputSetTy) Has(inputId string) bool {
+	_, ok := set[InputId(inputId)]
+	return ok
+}
+func (set InputSetTy) Remove(inputId string) {
+	delete(set, InputId(inputId))
 }
 
 // func NewTxIn() TxIn {
@@ -23,33 +35,62 @@ type TxOut struct {
 	Owner         *rsa.PublicKey `json:"-"`
 }
 
-// func NewTxOut() TxOut {
-// }
+func NewTxOut(owner *rsa.PublicKey, amount int) *TxOut {
+	return &TxOut{
+		Amount: amount,
+		Owner:  owner,
+	}
+}
+func (txout *TxOut) ComputeAndFillHash() {
+	type txOutJson struct {
+		Id            string `json:"id"`
+		TransactionId string `json:"transactionId"`
+		Amount        int    `json:"amount"`
+		Owner         string `json:"owner"`
+	}
+	bytes, err := json.Marshal(txOutJson{
+		Id:            txout.Id,
+		TransactionId: txout.TransactionId,
+		Amount:        txout.Amount,
+		Owner:         PubKeyToPem(txout.Owner),
+	})
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	rand.Seed(time.Now().UnixNano())
+	h := sha256.New()
+	h.Write(bytes)
+	b := make([]byte, 32)
+	rand.Read(b[:])
+	h.Write(b[:])
+	txout.Id = string(h.Sum(nil))
+}
 
 type Transaction struct {
 	SenderAddress   *rsa.PublicKey
 	ReceiverAddress *rsa.PublicKey
 	Amount          int
 	Id              []byte
-	Inputs          map[string]TxIn
-	Outputs         map[string]TxOut
+	Inputs          InputSetTy
+	Outputs         map[string]*TxOut
 	Signature       []byte
 }
 type transactionJson struct {
-	Id              string  `json:"id"`
-	SenderAddress   string  `json:"senderAddress"`
-	ReceiverAddress string  `json:"receiverAddress"`
-	Amount          int     `json:"amount"`
-	Inputs          []TxIn  `json:"inputs"`
-	Outputs         []TxOut `json:"outputs"`
-	Signature       string  `json:"signature"`
+	Id              string   `json:"id"`
+	SenderAddress   string   `json:"senderAddress"`
+	ReceiverAddress string   `json:"receiverAddress"`
+	Amount          int      `json:"amount"`
+	Inputs          []string `json:"inputs"`
+	Outputs         []*TxOut `json:"outputs"`
+	Signature       string   `json:"signature"`
 }
 
 func (tx *Transaction) MarshalJSON() ([]byte, error) {
-	txIns := make([]TxIn, len(tx.Inputs))
-	txOuts := make([]TxOut, len(tx.Outputs))
-	for _, txIn := range tx.Inputs {
-		txIns = append(txIns, txIn)
+	txIns := make([]string, len(tx.Inputs))
+	txOuts := make([]*TxOut, len(tx.Outputs))
+	for txInId := range tx.Inputs {
+		txIns = append(txIns, string(txInId))
 	}
 	for _, txOut := range tx.Outputs {
 		txOuts = append(txOuts, txOut)
@@ -70,10 +111,10 @@ func (tx *Transaction) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	txIns := make(map[string]TxIn, len(txJson.Inputs))
-	txOuts := make(map[string]TxOut, len(txJson.Outputs))
-	for _, txIn := range txJson.Inputs {
-		txIns[txIn.PreviousOutputId] = txIn
+	txIns := make(InputSetTy, len(txJson.Inputs))
+	txOuts := make(map[string]*TxOut, len(txJson.Outputs))
+	for _, txInId := range txJson.Inputs {
+		txIns.Add(txInId)
 	}
 	for _, txOut := range txJson.Outputs {
 		txOuts[txOut.Id] = txOut
@@ -102,8 +143,8 @@ func NewTransaction(from, to *rsa.PublicKey, amount int) *Transaction {
 		SenderAddress:   from,
 		ReceiverAddress: to,
 		Amount:          amount,
-		Inputs:          map[string]TxIn{},
-		Outputs:         map[string]TxOut{},
+		Inputs:          InputSetTy{},
+		Outputs:         map[string]*TxOut{},
 	}
 }
 
