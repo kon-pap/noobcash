@@ -41,6 +41,22 @@ func (w *Wallet) GetWalletInfo() *WalletInfo {
 		Utxos:   w.Utxos,
 	}
 }
+func (w *WalletInfo) MarshalJSON() ([]byte, error) {
+	type printableWallet struct {
+		Balance int     `json:"balance"`
+		PubKey  string  `json:"address"`
+		Utxos   []TxOut `json:"utxos"`
+	}
+	txouts := make([]TxOut, len(w.Utxos))
+	for _, txout := range w.Utxos {
+		txouts = append(txouts, txout)
+	}
+	return json.Marshal(printableWallet{
+		Balance: w.Balance,
+		PubKey:  w.PubKey,
+		Utxos:   txouts,
+	})
+}
 
 ////
 // Serialization and deserialization
