@@ -14,12 +14,12 @@ import (
 type Wallet struct {
 	Balance int
 	PrivKey *rsa.PrivateKey
-	Utxos   []TxOut
+	Utxos   map[string]TxOut
 }
 type WalletInfo struct {
-	Balance int     `json:"balance"`
-	PubKey  string  `json:"address"`
-	Utxos   []TxOut `json:"utxos"`
+	Balance int              `json:"balance"`
+	PubKey  string           `json:"address"`
+	Utxos   map[string]TxOut `json:"utxos"`
 }
 
 func NewWallet(bits int) *Wallet {
@@ -30,7 +30,7 @@ func NewWallet(bits int) *Wallet {
 	}
 	return &Wallet{
 		PrivKey: privateKey,
-		Utxos:   []TxOut{},
+		Utxos:   map[string]TxOut{},
 	}
 }
 
@@ -154,6 +154,11 @@ func PubKeyFromPem(s string) *rsa.PublicKey {
 // 		PrivKey: privateKey,
 // 	}
 // }
+
+func (w *Wallet) selectUTXOs(targetAmount int) (sum int, txIns []TxIn) {
+
+	return
+}
 
 func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, error) {
 	if amount > w.Balance {

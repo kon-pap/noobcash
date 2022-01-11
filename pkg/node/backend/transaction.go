@@ -31,8 +31,8 @@ type Transaction struct {
 	ReceiverAddress *rsa.PublicKey
 	Amount          int
 	Id              []byte
-	Inputs          []TxIn
-	Outputs         []TxOut
+	Inputs          map[string]TxIn
+	Outputs         map[string]TxOut
 	Signature       []byte
 }
 type transactionJson struct {
@@ -46,13 +46,21 @@ type transactionJson struct {
 }
 
 func (tx *Transaction) MarshalJSON() ([]byte, error) {
+	txIns := make([]TxIn, len(tx.Inputs))
+	txOuts := make([]TxOut, len(tx.Outputs))
+	for _, txIn := range tx.Inputs {
+		txIns = append(txIns, txIn)
+	}
+	for _, txOut := range tx.Outputs {
+		txOuts = append(txOuts, txOut)
+	}
 	return json.Marshal(transactionJson{
 		Id:              HexEncodeByteSlice(tx.Id),
 		SenderAddress:   PubKeyToPem(tx.SenderAddress),
 		ReceiverAddress: PubKeyToPem(tx.ReceiverAddress),
 		Amount:          tx.Amount,
-		Inputs:          tx.Inputs,
-		Outputs:         tx.Outputs,
+		Inputs:          txIns,
+		Outputs:         txOuts,
 		Signature:       HexEncodeByteSlice(tx.Signature),
 	})
 }
@@ -62,12 +70,21 @@ func (tx *Transaction) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
+	txIns := make(map[string]TxIn, len(txJson.Inputs))
+	txOuts := make(map[string]TxOut, len(txJson.Outputs))
+	for _, txIn := range txJson.Inputs {
+		txIns[txIn.PreviousOutputId] = txIn
+	}
+	for _, txOut := range txJson.Outputs {
+		txOuts[txOut.Id] = txOut
+	}
+
 	tx.Id = HexDecodeByteSlice(txJson.Id)
 	tx.SenderAddress = PubKeyFromPem(txJson.SenderAddress)
 	tx.ReceiverAddress = PubKeyFromPem(txJson.ReceiverAddress)
 	tx.Amount = txJson.Amount
-	tx.Inputs = txJson.Inputs
-	tx.Outputs = txJson.Outputs
+	tx.Inputs = txIns
+	tx.Outputs = txOuts
 	tx.Signature = HexDecodeByteSlice(txJson.Signature)
 	return nil
 }
@@ -85,8 +102,8 @@ func NewTransaction(from, to *rsa.PublicKey, amount int) *Transaction {
 		SenderAddress:   from,
 		ReceiverAddress: to,
 		Amount:          amount,
-		Inputs:          []TxIn{},
-		Outputs:         []TxOut{},
+		Inputs:          map[string]TxIn{},
+		Outputs:         map[string]TxOut{},
 	}
 }
 
