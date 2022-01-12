@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -110,4 +111,25 @@ func (b *Block) ComputeAndFillHash() {
 	}
 	byteArray := (sha256.Sum256(txInfoBytes))
 	b.CurrentHash = byteArray[:]
+}
+
+func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
+	initTx := NewTransaction(nil, pubKey, n*100)
+	initTx.ComputeAndFillHash()
+
+	txOut := NewTxOut(pubKey, n*100)
+	txOut.TransactionId = HexEncodeByteSlice(initTx.Id)
+	txOut.ComputeAndFillHash()
+
+	initTx.Outputs[txOut.Id] = txOut
+
+	b := &Block{
+		Index:        0,
+		Timestamp:    time.Now(),
+		Nonce:        "0",
+		PreviousHash: []byte("1"),
+	}
+	b.AddTx(initTx)
+	b.ComputeAndFillHash()
+	return b
 }
