@@ -50,8 +50,10 @@ func (w *WalletInfo) MarshalJSON() ([]byte, error) {
 		Utxos   []*TxOut `json:"utxos"`
 	}
 	txouts := make([]*TxOut, len(w.Utxos))
+	i := 0
 	for _, txout := range w.Utxos {
-		txouts = append(txouts, txout)
+		txouts[i] = txout
+		i++
 	}
 	return json.Marshal(printableWallet{
 		Balance: w.Balance,

@@ -32,6 +32,7 @@ func NewBlock(index int, prevHash []byte) *Block {
 
 // This type will be used to send block to other nodes
 type blockJson struct {
+	Index        int            `json:"index"`
 	Timestamp    time.Time      `json:"createdTimestamp"`
 	Transactions []*Transaction `json:"transactions"`
 	Nonce        string         `json:"nonce"`
@@ -41,6 +42,7 @@ type blockJson struct {
 
 func (b *Block) MarshalJSON() ([]byte, error) {
 	return json.Marshal(blockJson{
+		Index:        b.Index,
 		Timestamp:    b.Timestamp,
 		Transactions: b.Transactions,
 		Nonce:        b.Nonce,
@@ -55,6 +57,7 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+	b.Index = blockJson.Index
 	b.Timestamp = blockJson.Timestamp
 	b.Transactions = blockJson.Transactions
 	b.Nonce = blockJson.Nonce
@@ -69,7 +72,7 @@ func (b *Block) String() string {
 		fmt.Print(err)
 		os.Exit(1)
 	}
-	return fmt.Sprintf("Block id: %d, %s", b.Index, string(strBytes))
+	return string(strBytes)
 }
 
 func (b *Block) AddTx(tx *Transaction) error {
@@ -114,15 +117,7 @@ func (b *Block) ComputeAndFillHash() {
 }
 
 func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
-	initTx := NewTransaction(nil, pubKey, n*100)
-	initTx.ComputeAndFillHash()
-
-	txOut := NewTxOut(pubKey, n*100)
-	txOut.TransactionId = HexEncodeByteSlice(initTx.Id)
-	txOut.ComputeAndFillHash()
-
-	initTx.Outputs[txOut.Id] = txOut
-
+	initTx := NewGenesisTransaction(pubKey, n*100)
 	b := &Block{
 		Index:        0,
 		Timestamp:    time.Now(),

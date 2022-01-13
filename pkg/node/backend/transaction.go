@@ -28,9 +28,9 @@ func (set InputSetTy) Remove(inputId string) {
 // }
 
 type TxOut struct {
-	Id            string
-	TransactionId string
-	Amount        int
+	Id            string         `json:"id"`
+	TransactionId string         `json:"transactionId"`
+	Amount        int            `json:"amount"`
 	Owner         *rsa.PublicKey `json:"-"`
 }
 
@@ -47,12 +47,13 @@ func (txout *TxOut) ComputeAndFillHash() {
 		Amount        int    `json:"amount"`
 		Owner         string `json:"owner"`
 	}
-	bytes, err := json.Marshal(txOutJson{
+	tmpTxout := txOutJson{
 		Id:            txout.Id,
 		TransactionId: txout.TransactionId,
 		Amount:        txout.Amount,
 		Owner:         PubKeyToPem(txout.Owner),
-	})
+	}
+	bytes, err := json.Marshal(tmpTxout)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -63,7 +64,7 @@ func (txout *TxOut) ComputeAndFillHash() {
 	b := make([]byte, 32)
 	rand.Read(b[:])
 	h.Write(b[:])
-	txout.Id = string(h.Sum(nil))
+	txout.Id = HexEncodeByteSlice(h.Sum(nil))
 }
 
 type Transaction struct {
@@ -88,11 +89,15 @@ type transactionJson struct {
 func (tx *Transaction) MarshalJSON() ([]byte, error) {
 	txIns := make([]string, len(tx.Inputs))
 	txOuts := make([]*TxOut, len(tx.Outputs))
+	i := 0
 	for txInId := range tx.Inputs {
-		txIns = append(txIns, string(txInId))
+		txIns[i] = string(txInId)
+		i++
 	}
+	i = 0
 	for _, txOut := range tx.Outputs {
-		txOuts = append(txOuts, txOut)
+		txOuts[i] = txOut
+		i++
 	}
 	return json.Marshal(transactionJson{
 		Id:              HexEncodeByteSlice(tx.Id),
@@ -145,6 +150,21 @@ func NewTransaction(from, to *rsa.PublicKey, amount int) *Transaction {
 		Inputs:          InputSetTy{},
 		Outputs:         map[string]*TxOut{},
 	}
+}
+
+func NewGenesisTransaction(to *rsa.PublicKey, amount int) *Transaction {
+	newTx := NewTransaction(nil, to, amount)
+	newTx.Id = []byte("genesis")
+
+	newTxOut := NewTxOut(to, amount)
+	newTxOut.Id = HexEncodeByteSlice(newTx.Id)
+	newTxOut.ComputeAndFillHash()
+
+	newTx.Outputs[newTxOut.Id] = newTxOut
+	newTx.ComputeAndFillHash()
+	newTxOut.TransactionId = HexEncodeByteSlice(newTx.Id)
+
+	return newTx
 }
 
 func (tx *Transaction) ComputeAndFillHash() {
