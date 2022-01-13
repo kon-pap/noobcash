@@ -3,7 +3,6 @@ package backend
 import (
 	"crypto/rsa"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -156,15 +155,4 @@ func (tx *Transaction) ComputeAndFillHash() {
 	}
 	byteArray := (sha256.Sum256(txInfoBytes))
 	tx.Id = byteArray[:]
-}
-func HexEncodeByteSlice(b []byte) string {
-	return fmt.Sprintf("%x", b)
-}
-func HexDecodeByteSlice(s string) []byte {
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	return b
 }

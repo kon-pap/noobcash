@@ -53,5 +53,4 @@ func (n *Node) IsValidBlock(block *bck.Block) bool {
 func (n *Node) IsValidChain() bool {
 }
 func (n *Node) ResolveConflict(block *bck.Block) error {
-}
-*/
+}*/

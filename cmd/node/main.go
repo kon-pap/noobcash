@@ -1,20 +1,20 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 
-	"github.com/kon-pap/noobcash/pkg/env"
 	"github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
-const dotenvPath string = "./config/node.env"
-
 func main() {
-	env.Import(dotenvPath)
-	walletPath := env.Get("WALLET_PATH")
+	isBootstrap := flag.Bool("bootstrap", false, "a bool")
+	flag.Parse()
 
-	wallet := backend.LoadWallet(walletPath + "/first")
-	fmt.Println(wallet.PrivKey.D.Bytes())
+	wallet := backend.NewWallet(1024)
+	fmt.Println(wallet)
 
-	// fmt.Println(env.Get("BOOTSTRAP_NODE_IP"))
+	if *isBootstrap {
+		fmt.Println("This is the bootstrap node (id=0)!")
+	}
 }
