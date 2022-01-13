@@ -69,7 +69,7 @@ func (b *Block) String() string {
 		fmt.Print(err)
 		os.Exit(1)
 	}
-	return fmt.Sprintf("Block id: %d, %s", b.Index, string(strBytes))
+	return string(strBytes)
 }
 
 func (b *Block) AddTx(tx *Transaction) error {
@@ -114,15 +114,7 @@ func (b *Block) ComputeAndFillHash() {
 }
 
 func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
-	initTx := NewTransaction(nil, pubKey, n*100)
-	initTx.ComputeAndFillHash()
-
-	txOut := NewTxOut(pubKey, n*100)
-	txOut.TransactionId = HexEncodeByteSlice(initTx.Id)
-	txOut.ComputeAndFillHash()
-
-	initTx.Outputs[txOut.Id] = txOut
-
+	initTx := NewGenesisTransaction(pubKey, n*100)
 	b := &Block{
 		Index:        0,
 		Timestamp:    time.Now(),

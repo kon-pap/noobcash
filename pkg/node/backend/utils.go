@@ -7,7 +7,8 @@ import (
 )
 
 func HexEncodeByteSlice(b []byte) string {
-	return fmt.Sprintf("%x", b)
+	resSlice := hex.EncodeToString(b)
+	return resSlice
 }
 func HexDecodeByteSlice(s string) []byte {
 	b, err := hex.DecodeString(s)
