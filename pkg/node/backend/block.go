@@ -32,7 +32,6 @@ func NewBlock(index int, prevHash []byte) *Block {
 
 // This type will be used to send block to other nodes
 type blockJson struct {
-	Index        int            `json:"index"`
 	Timestamp    time.Time      `json:"createdTimestamp"`
 	Transactions []*Transaction `json:"transactions"`
 	Nonce        string         `json:"nonce"`
@@ -42,7 +41,6 @@ type blockJson struct {
 
 func (b *Block) MarshalJSON() ([]byte, error) {
 	return json.Marshal(blockJson{
-		Index:        b.Index,
 		Timestamp:    b.Timestamp,
 		Transactions: b.Transactions,
 		Nonce:        b.Nonce,
@@ -57,7 +55,6 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	b.Index = blockJson.Index
 	b.Timestamp = blockJson.Timestamp
 	b.Transactions = blockJson.Transactions
 	b.Nonce = blockJson.Nonce
