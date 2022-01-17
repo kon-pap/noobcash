@@ -15,14 +15,27 @@ type Node struct {
 	Ring        map[string]*bck.WalletInfo
 }
 
+var myNode *Node
+
 func NewNode(currBlockId int, bits int) *Node {
+	if myNode != nil {
+		return myNode // enforces only one node per runtime
+	}
 	w := bck.NewWallet(bits)
 	getInfo := w.GetWalletInfo()
-	return &Node{
+	myNode = &Node{
+		Chain:       []*bck.Block{},
 		CurrBlockId: currBlockId,
 		Wallet:      w,
 		Ring:        map[string]*bck.WalletInfo{getInfo.PubKey: getInfo},
 	}
+	return myNode
+}
+func (n *Node) getLastBlock() *bck.Block {
+	if len(n.Chain) == 0 {
+		return nil
+	}
+	return n.Chain[len(n.Chain)-1]
 }
 
 func (n *Node) IsValidSig(tx bck.Transaction) bool {
@@ -34,13 +47,14 @@ func (n *Node) IsValidTx(tx bck.Transaction) bool {
 	//The validation is consisted of 2 steps
 	//Step1: isValidSig
 	//Step2: check transaction inputs/outputs
-	isValidSig := n.IsValidSig(tx) //Step1
-	for txInId := range tx.Inputs {
-		if _, ok := n.Wallet.Utxos[string(txInId)]; !ok {
-			return false
+	return n.IsValidSig(tx) && func() bool {
+		for txInId := range tx.Inputs {
+			if _, ok := n.Wallet.Utxos[string(txInId)]; !ok {
+				return false
+			}
 		}
-	}
-	return isValidSig
+		return true
+	}()
 }
 
 /*
