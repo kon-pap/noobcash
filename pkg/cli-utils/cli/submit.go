@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
+	"net/http"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -14,7 +17,23 @@ var submitCmd = &cobra.Command{
 		if len(args) != 2 {
 			return fmt.Errorf("invalid number of arguments. expected 2, got %d", len(args))
 		}
-		// TODO: implement
+		recipient := args[0]
+		_, err := strconv.Atoi(args[1])
+		if err != nil {
+			return err
+		}
+		ip, port, err := getAddress(cmd)
+		if err != nil {
+			return err
+		}
+		transactionJson := bytes.NewBuffer([]byte(`{"recipient":"` + recipient + `","amount":` + args[1] + `}`))
+		body, err := getResponseBody(
+			http.Post(fmt.Sprintf("http://%s:%d/submit", ip, port), "application/json", transactionJson),
+		)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(body))
 		return nil
 	},
 }

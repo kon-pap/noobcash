@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kon-pap/noobcash/pkg/node"
 	"github.com/kon-pap/noobcash/pkg/node/backend"
 	"github.com/spf13/cobra"
 )
@@ -15,14 +16,15 @@ var rootCmd = &cobra.Command{
 Class project for the course "Distributed Systems" at the National Technical University of Athens`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		isBootstrap, _ := cmd.Flags().GetBool("bootstrap")
-		wallet := backend.NewWallet(1024)
-		// fmt.Println(wallet)
+		port, _ := cmd.Flags().GetString("port")
+		// wallet := backend.NewWallet(1024)
+		newNode := node.NewNode(0, 1024)
 		if isBootstrap {
-			// fmt.Println("This is the bootstrap node (id=0)!")
-			genBlock := backend.CreateGenesisBlock(100, &wallet.PrivKey.PublicKey)
+			genBlock := backend.CreateGenesisBlock(100, &newNode.Wallet.PrivKey.PublicKey)
 			fmt.Println(genBlock)
 		}
-
+		fmt.Println("Starting http api server on port", port)
+		node.ServeApi(port)
 		return nil
 	},
 }
@@ -36,5 +38,6 @@ func Execute() {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.Flags().BoolP("bootstrap", "b", false, "Controls whether current node is bootstrap node or not")
+	rootCmd.PersistentFlags().BoolP("bootstrap", "b", false, "Controls whether current node is bootstrap node or not")
+	rootCmd.PersistentFlags().StringP("port", "p", "9090", "Port to serve http api on")
 }
