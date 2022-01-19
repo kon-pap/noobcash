@@ -19,5 +19,8 @@ cli: bin/noobcash-cli
 bin/noobcash-cli: ./cmd/cli/main.go $(CLI_DEPS)
 	cd cmd/cli && go build -o ../../bin/noobcash-cli && cd ../..
 
+test:
+	go test ./... -v || echo -n ""
+
 clean:
 	rm -r bin/*

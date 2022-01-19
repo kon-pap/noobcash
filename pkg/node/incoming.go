@@ -43,13 +43,15 @@ func registerNodesHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errMsg, http.StatusBadRequest)
 		return
 	}
+	// this step is needed cause json Decode may fail silently
+	firstNodeTmp := nodes[0]
+	if firstNodeTmp.PubKey == "" {
+		log.Println("Received node without public key:", firstNodeTmp)
+		http.Error(w, "Received node without public key", http.StatusBadRequest)
+		return
+	}
 	regCnt := 0
 	for _, currNode := range nodes {
-		if currNode.PubKey == "" {
-			log.Println("Received node without public key:", currNode)
-			http.Error(w, "Received node without public key", http.StatusBadRequest)
-			return
-		}
 		if _, ok := myNode.Ring[currNode.PubKey]; ok {
 			log.Println("Registration attempted on already registered node with incoming id:", currNode.Id)
 			continue
