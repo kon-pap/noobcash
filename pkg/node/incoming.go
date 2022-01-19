@@ -88,18 +88,12 @@ func submitTxsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, currTx := range txs {
-		if !myNode.IsValidTx(currTx) {
-			log.Println("Received invalid transaction:", currTx)
-
-			continue
-		}
-		myNode.getLastBlock().AddTx(currTx)
-		if myNode.getLastBlock().IsFull() {
-			myNode.MineBlock(myNode.getLastBlock()) // TODO: make this async ?
-			myNode.Chain = append(myNode.Chain, bck.NewBlock(
-				len(myNode.Chain),
-				myNode.getLastBlock().CurrentHash,
-			))
+		err := myNode.AcceptTx(currTx)
+		if err != nil {
+			log.Println("Error accepting tx:", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 	}
+	fmt.Fprintf(w, "Accepted %d transaction(s)", len(txs))
 }
