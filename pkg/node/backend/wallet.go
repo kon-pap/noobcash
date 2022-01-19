@@ -19,9 +19,9 @@ type Wallet struct {
 	Utxos   map[string]*TxOut
 }
 type WalletInfo struct {
-	Balance int               `json:"balance"`
-	PubKey  string            `json:"address"`
-	Utxos   map[string]*TxOut `json:"utxos"`
+	Balance int
+	PubKey  *rsa.PublicKey
+	Utxos   map[string]*TxOut
 }
 
 func NewWallet(bits int) *Wallet {
@@ -36,10 +36,17 @@ func NewWallet(bits int) *Wallet {
 	}
 }
 
+func NewWalletInfo(pubKey *rsa.PublicKey) *WalletInfo {
+	return &WalletInfo{
+		PubKey: pubKey,
+		Utxos:  map[string]*TxOut{},
+	}
+}
+
 func (w *Wallet) GetWalletInfo() *WalletInfo {
 	return &WalletInfo{
 		Balance: w.Balance,
-		PubKey:  PubKeyToPem(&w.PrivKey.PublicKey),
+		PubKey:  &w.PrivKey.PublicKey,
 		Utxos:   w.Utxos,
 	}
 }
@@ -57,7 +64,7 @@ func (w *WalletInfo) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(printableWallet{
 		Balance: w.Balance,
-		PubKey:  w.PubKey,
+		PubKey:  PubKeyToPem(w.PubKey),
 		Utxos:   txouts,
 	})
 }

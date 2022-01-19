@@ -24,8 +24,7 @@ Class project for the course "Distributed Systems" at the National Technical Uni
 			genBlock := backend.CreateGenesisBlock(nodecnt, &newNode.Wallet.PrivKey.PublicKey)
 			fmt.Println(genBlock)
 		}
-		fmt.Println("Starting http api server on port", port)
-		node.ServeApi(port)
+		node.ServeApiForCli(port)
 		return nil
 	},
 }

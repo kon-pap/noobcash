@@ -9,6 +9,7 @@ import (
 
 type Node struct {
 	// chain, currBlockId, wallet, ring
+	Id          int
 	Chain       []*bck.Block
 	CurrBlockId int
 	Wallet      *bck.Wallet
@@ -22,13 +23,14 @@ func NewNode(currBlockId int, bits int) *Node {
 		return myNode // enforces only one node per runtime
 	}
 	w := bck.NewWallet(bits)
-	getInfo := w.GetWalletInfo()
+	walletInfo := w.GetWalletInfo()
+	myNodeInfo := NewNodeInfo(-1, "", "", walletInfo.PubKey)
 	myNode = &Node{
 		Chain:       []*bck.Block{},
 		CurrBlockId: currBlockId,
 		Wallet:      w,
 		Ring: map[string]*NodeInfo{
-			getInfo.PubKey: NewNodeInfo(getInfo),
+			bck.PubKeyToPem(walletInfo.PubKey): myNodeInfo,
 		},
 	}
 	return myNode
