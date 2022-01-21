@@ -30,13 +30,15 @@ func ServeApiForNodes(port string) {
 	log.Println("Node server exitied:", srv.ListenAndServe())
 }
 
+type transferNodeTy struct {
+	Hostname string `json:"hostname"`
+	Port     string `json:"port"`
+	PubKey   string `json:"pubKey"`
+	Id       int    `json:"id"`
+}
+
 func registerNodesHandler(w http.ResponseWriter, r *http.Request) {
-	var nodes []struct {
-		Hostname string `json:"hostname"`
-		Port     string `json:"port"`
-		PubKey   string `json:"pubKey"`
-		Id       int    `json:"id"`
-	}
+	var nodes []transferNodeTy
 	err := json.NewDecoder(r.Body).Decode(&nodes)
 	if err != nil || len(nodes) == 0 {
 		errMsg := fmt.Sprintf("Body could not be desirialized: %s", err.Error())

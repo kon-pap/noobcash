@@ -11,6 +11,33 @@ import (
 	"github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
+func TestRegisterNodesHandler(t *testing.T) {
+	t.Run("Send a single node", func(t *testing.T) {
+		jsNode, err := json.Marshal([]transferNodeTy{
+			{ //TODO: create a new node here for the test to work
+				Hostname: "localhost",
+				Port:     "8080",
+				PubKey:   backend.PubKeyToPem(&myNode.Wallet.PrivKey.PublicKey),
+				Id:       2,
+			},
+		})
+		if err != nil {
+			log.Fatalln(err)
+		}
+		log.Println("Sending node:", string(jsNode))
+		body := bytes.NewReader(jsNode)
+		req := httptest.NewRequest("POST", "/register-nodes", body)
+		w := httptest.NewRecorder()
+		setupNodeHandler().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+		}
+		if w.Body.String() != "Registered 1 node(s)" {
+			t.Errorf("Expected body %s, got %s", "Registered 1 node(s)", w.Body.String())
+		}
+	})
+}
+
 func TestSubmitBlocksHandler(t *testing.T) {
 	t.Run("Send a single block", func(t *testing.T) {
 		jsBlock, err := json.Marshal([]*backend.Block{
@@ -28,7 +55,7 @@ func TestSubmitBlocksHandler(t *testing.T) {
 			t.Error("Did not get expected HTTP status code, got", w.Code)
 		}
 		if w.Body.String() != "Accepted 1 block(s)" {
-			t.Error("Did not get expected greeting, got", w.Body.String())
+			t.Errorf("Expected body %s, got %s", "Accepted 1 block(s)", w.Body.String())
 		}
 	})
 }
@@ -53,7 +80,7 @@ func TestSubmitTxsHandler(t *testing.T) {
 			t.Error("Did not get expected HTTP status code, got", w.Code)
 		}
 		if w.Body.String() != "Accepted 1 transaction(s)" {
-			t.Error("Did not get expected greeting, got", w.Body.String())
+			t.Errorf("Expected body %s, got %s", "Accepted 1 transaction(s)", w.Body.String())
 		}
 	})
 }
