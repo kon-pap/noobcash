@@ -7,19 +7,21 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
+	"sort"
 )
 
 type Wallet struct {
 	Balance int
 	PrivKey *rsa.PrivateKey
-	Utxos   map[string]TxOut
+	Utxos   map[string]*TxOut
 }
 type WalletInfo struct {
-	Balance int              `json:"balance"`
-	PubKey  string           `json:"address"`
-	Utxos   map[string]TxOut `json:"utxos"`
+	Balance int               `json:"balance"`
+	PubKey  string            `json:"address"`
+	Utxos   map[string]*TxOut `json:"utxos"`
 }
 
 func NewWallet(bits int) *Wallet {
@@ -30,7 +32,7 @@ func NewWallet(bits int) *Wallet {
 	}
 	return &Wallet{
 		PrivKey: privateKey,
-		Utxos:   map[string]TxOut{},
+		Utxos:   map[string]*TxOut{},
 	}
 }
 
@@ -43,13 +45,15 @@ func (w *Wallet) GetWalletInfo() *WalletInfo {
 }
 func (w *WalletInfo) MarshalJSON() ([]byte, error) {
 	type printableWallet struct {
-		Balance int     `json:"balance"`
-		PubKey  string  `json:"address"`
-		Utxos   []TxOut `json:"utxos"`
+		Balance int      `json:"balance"`
+		PubKey  string   `json:"address"`
+		Utxos   []*TxOut `json:"utxos"`
 	}
-	txouts := make([]TxOut, len(w.Utxos))
+	txouts := make([]*TxOut, len(w.Utxos))
+	i := 0
 	for _, txout := range w.Utxos {
-		txouts = append(txouts, txout)
+		txouts[i] = txout
+		i++
 	}
 	return json.Marshal(printableWallet{
 		Balance: w.Balance,
@@ -170,9 +174,42 @@ func PubKeyFromPem(s string) *rsa.PublicKey {
 // 		PrivKey: privateKey,
 // 	}
 // }
+type utxoTmp struct {
+	key string
+	val *TxOut
+}
+type utxoTmpListTy []utxoTmp
 
-func (w *Wallet) selectUTXOs(targetAmount int) (sum int, txIns []TxIn) {
+func (t utxoTmpListTy) Less(i, j int) bool { return t[i].val.Amount > t[j].val.Amount }
+func (t utxoTmpListTy) Len() int           { return len(t) }
+func (t utxoTmpListTy) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 
+// func (w *Wallet) selectUTXOsRandomImprove(targetAmount int) (sum int, txIns []*TxOut) {}
+
+// Chooses utxos from the wallet that are sufficient to pay the amount,
+// removes them from the utxos map, and returns them along with their sum.
+func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxOuts []*TxOut, err error) {
+	tmp := make(utxoTmpListTy, len(w.Utxos))
+	i := 0
+	for k, v := range w.Utxos {
+		tmp[i] = utxoTmp{k, v}
+		i++
+	}
+	sort.Sort(tmp)
+	for _, v := range tmp {
+		if sum >= targetAmount {
+			break
+		}
+		sum += v.val.Amount
+		previousTxOuts = append(previousTxOuts, v.val)
+	}
+	if sum < targetAmount {
+		err = errors.New("not enough money")
+	} else {
+		for _, chosen := range previousTxOuts {
+			delete(w.Utxos, chosen.Id)
+		}
+	}
 	return
 }
 
@@ -182,7 +219,21 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 	}
 	tx := NewTransaction(&w.PrivKey.PublicKey, address, amount)
 	// TODO: coin selection to find utxos to use as TxIns
+	sum, previousTxOuts, err := w.selectUTXOsLargestFirst(amount)
+	if err != nil {
+		return nil, err
+	}
+	for _, txOut := range previousTxOuts {
+		tx.Inputs.Add(txOut.Id)
+	}
+
 	// TODO: add TxOut to target address, add TxOut to change address
+	targetTxOut := NewTxOut(address, amount)
+	changeTxOut := NewTxOut(&w.PrivKey.PublicKey, sum-amount)
+	targetTxOut.ComputeAndFillHash()
+	changeTxOut.ComputeAndFillHash()
+	tx.Outputs[targetTxOut.Id] = targetTxOut
+	tx.Outputs[changeTxOut.Id] = changeTxOut
 
 	tx.ComputeAndFillHash()
 	return tx, nil

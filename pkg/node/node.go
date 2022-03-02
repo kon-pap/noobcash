@@ -12,47 +12,91 @@ type Node struct {
 	Chain       []*bck.Block
 	CurrBlockId int
 	Wallet      *bck.Wallet
-	Ring        map[string]*bck.WalletInfo
+	Ring        map[string]*NodeInfo
 }
+
+var myNode *Node
 
 func NewNode(currBlockId int, bits int) *Node {
+	if myNode != nil {
+		return myNode // enforces only one node per runtime
+	}
 	w := bck.NewWallet(bits)
 	getInfo := w.GetWalletInfo()
-	return &Node{
+	myNode = &Node{
+		Chain:       []*bck.Block{},
 		CurrBlockId: currBlockId,
 		Wallet:      w,
-		Ring:        map[string]*bck.WalletInfo{getInfo.PubKey: getInfo},
+		Ring: map[string]*NodeInfo{
+			getInfo.PubKey: NewNodeInfo(getInfo),
+		},
 	}
+	return myNode
 }
 
-func (n *Node) IsValidSig(tx bck.Transaction) bool {
-
+//* TRANSACTION
+func (n *Node) IsValidSig(tx *bck.Transaction) bool {
 	err := rsa.VerifyPKCS1v15(tx.SenderAddress, crypto.SHA256, tx.Id, tx.Signature)
 	return err == nil
 }
-func (n *Node) IsValidTx(tx bck.Transaction) bool {
+func (n *Node) IsValidTx(tx *bck.Transaction) bool {
 	//The validation is consisted of 2 steps
 	//Step1: isValidSig
 	//Step2: check transaction inputs/outputs
-	isValidSig := n.IsValidSig(tx) //Step1
-	txInputs := tx.Inputs
-	for _, i := range txInputs {
-		if _, ok := n.Wallet.Utxos[i.PreviousOutputId]; !ok {
-			return false
+	return n.IsValidSig(tx) && func() bool {
+		for txInId := range tx.Inputs {
+			if _, ok := n.Wallet.Utxos[string(txInId)]; !ok {
+				return false
+			}
 		}
-	}
-	return isValidSig
+		return true
+	}()
 }
 
 /*
+func (n *Node) BroadcastTx(tx *bck.Transaction) error {
+}
+*/
+
+//* BLOCK
+/*
 func (n *Node) MineBlock(block *bck.Block) error {
+}
+// currhash is correct && previous_hash is actually the hash of the previous block
+func (n *Node) IsValidBlock(block *bck.Block) bool {
+}
+func (n *Node) ApplyBlock(block *bck.Block) error {
 }
 func (n *Node) BroadcastBlock(block *bck.Block) error {
 }
-func (n *Node) IsValidBlock(block *bck.Block) bool {
+*/
+
+//* CHAIN
+func (n *Node) getLastBlock() *bck.Block {
+	if len(n.Chain) == 0 {
+		return nil
+	}
+	return n.Chain[len(n.Chain)-1]
 }
+
+/*
 func (n *Node) IsValidChain() bool {
 }
+func (n *Node) ApplyChain(blocks []*bck.Block) error {
+}
 func (n *Node) ResolveConflict(block *bck.Block) error {
+}
+*/
+
+//* RING
+/*
+// 1. Send Wallet pubkey (Connecting will provide the IP and port on its own)
+// 2. Receive node id
+// 3. Wait for info of all other nodes
+func (n *Node) ConnectToBootstrap(ip, port string) error {
+}
+
+// Send IP, port, pubkey of all nodes
+func (n *Node) BroadcastRingInfo() error {
 }
 */
