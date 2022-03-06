@@ -3,16 +3,20 @@ package node
 import (
 	"crypto"
 	"crypto/rsa"
+	"fmt"
+	"log"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
 type Node struct {
 	// chain, currBlockId, wallet, ring
+	Id          int
 	Chain       []*bck.Block
 	CurrBlockId int
 	Wallet      *bck.Wallet
 	Ring        map[string]*NodeInfo
+	// TODO: add mutexes to lock necessary resources
 }
 
 var myNode *Node
@@ -22,13 +26,14 @@ func NewNode(currBlockId int, bits int) *Node {
 		return myNode // enforces only one node per runtime
 	}
 	w := bck.NewWallet(bits)
-	getInfo := w.GetWalletInfo()
+	walletInfo := w.GetWalletInfo()
+	myNodeInfo := NewNodeInfo(-1, "", "", walletInfo.PubKey)
 	myNode = &Node{
 		Chain:       []*bck.Block{},
 		CurrBlockId: currBlockId,
 		Wallet:      w,
 		Ring: map[string]*NodeInfo{
-			getInfo.PubKey: NewNodeInfo(getInfo),
+			bck.PubKeyToPem(walletInfo.PubKey): myNodeInfo,
 		},
 	}
 	return myNode
@@ -37,6 +42,9 @@ func NewNode(currBlockId int, bits int) *Node {
 //* TRANSACTION
 func (n *Node) IsValidSig(tx *bck.Transaction) bool {
 	err := rsa.VerifyPKCS1v15(tx.SenderAddress, crypto.SHA256, tx.Id, tx.Signature)
+	if err == nil {
+		log.Println("Signature validation failed")
+	}
 	return err == nil
 }
 func (n *Node) IsValidTx(tx *bck.Transaction) bool {
@@ -44,13 +52,34 @@ func (n *Node) IsValidTx(tx *bck.Transaction) bool {
 	//Step1: isValidSig
 	//Step2: check transaction inputs/outputs
 	return n.IsValidSig(tx) && func() bool {
+		senderNode := n.Ring[bck.PubKeyToPem(tx.SenderAddress)]
 		for txInId := range tx.Inputs {
-			if _, ok := n.Wallet.Utxos[string(txInId)]; !ok {
+			if _, ok := senderNode.WInfo.Utxos[string(txInId)]; !ok {
+				log.Println("Wallet", senderNode.Id, "does not have UTXO", txInId)
 				return false
 			}
 		}
 		return true
 	}()
+}
+func (n *Node) AcceptTx(tx *bck.Transaction) error {
+	if !n.IsValidTx(tx) {
+		return fmt.Errorf("transaction is not valid")
+	}
+	if n.getLastBlock() == nil {
+		return fmt.Errorf("internal error: no block in chain")
+	}
+	n.getLastBlock().AddTx(tx)
+	if n.getLastBlock().IsFull() {
+		//! NOTE: MineBlock will fill the block's hash at the end
+		//! Assumption: MineBlock will increment the node.CurrBlockId
+		n.MineBlock(n.getLastBlock())
+		n.Chain = append(n.Chain, bck.NewBlock(
+			len(n.Chain),
+			n.getLastBlock().CurrentHash,
+		))
+	}
+	return nil
 }
 
 /*
