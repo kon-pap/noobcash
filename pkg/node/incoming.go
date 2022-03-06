@@ -55,7 +55,7 @@ func registerNodesHandler(w http.ResponseWriter, r *http.Request) {
 	regCnt := 0
 	for _, currNode := range nodes {
 		if _, ok := myNode.Ring[currNode.PubKey]; ok {
-			log.Println("Registration attempted on already registered node with incoming id:", currNode.Id)
+			log.Println("Incoming node pubkey is already registered:", currNode.Id)
 			continue
 		}
 		// add it to the ring
