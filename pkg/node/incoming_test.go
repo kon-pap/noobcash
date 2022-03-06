@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/kon-pap/noobcash/pkg/node/backend"
@@ -62,6 +63,37 @@ func TestSubmitBlocksHandler(t *testing.T) {
 		}
 		if w.Body.String() != "Accepted 1 block(s)" {
 			t.Errorf("Expected body %s, got %s", "Accepted 1 block(s)", w.Body.String())
+		}
+	})
+}
+
+func TestBootstrapNodeHandler(t *testing.T) {
+	t.Run("Bootstrap a single node", func(t *testing.T) {
+		privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
+		if err != nil {
+			t.Error(err)
+		}
+		jsNode, err := json.Marshal(&bootstrapNodeTy{
+			Hostname: "localhost",
+			Port:     "7070",
+			PubKey:   backend.PubKeyToPem(&privateKey.PublicKey),
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		// log.Println("Sending node:", string(jsNode))
+		body := bytes.NewReader(jsNode)
+		req := httptest.NewRequest("POST", "/bootstrap-node", body)
+		w := httptest.NewRecorder()
+		setupNodeHandler().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Error("Did not get expected HTTP status code, got", w.Code, w.Body.String())
+			return
+		}
+
+		if _, err := strconv.Atoi(w.Body.String()); err != nil {
+			t.Errorf("Expected int in body, got %s", w.Body.String())
+			return
 		}
 	})
 }

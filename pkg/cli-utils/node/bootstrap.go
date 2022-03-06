@@ -13,8 +13,7 @@ var bootstrapCmd = &cobra.Command{
 	Short: "Run Bootstrap node",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nodecnt, _ := cmd.Flags().GetInt("nodecnt")
-		nodeport, _ := cmd.Flags().GetString("nodeport")
-		ip, _ := cmd.Flags().GetString("ip")
+		ip, nodeport := getNodeApiHostDetails(cmd)
 		newNode := node.NewNode(0, 1024, ip, nodeport)
 		genBlock := backend.CreateGenesisBlock(nodecnt, &newNode.Wallet.PrivKey.PublicKey)
 		fmt.Println(genBlock)
@@ -27,5 +26,7 @@ var bootstrapCmd = &cobra.Command{
 }
 
 func init() {
+	bootstrapCmd.PersistentFlags().IntP("nodecnt", "c", 5, "Number of nodes to bootstrap for")
+
 	rootCmd.AddCommand(bootstrapCmd)
 }
