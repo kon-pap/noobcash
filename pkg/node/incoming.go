@@ -18,7 +18,7 @@ func setupNodeHandler() *mux.Router {
 	r.HandleFunc("/submit-blocks", submitBlocksHandler).Methods("POST")
 	// Accepts a list of transactions to try and insert into blocks
 	r.HandleFunc("/submit-txs", submitTxsHandler).Methods("POST")
-	if myNode.IsBootstrap() { // only bootstrap node can accept new nodes
+	if myNode.IsBootstrap() { // only bootstrap node can register new nodes
 		r.HandleFunc("/bootstrap-node", bootstrapNodeHandler).Methods("POST")
 	}
 	return r
@@ -119,9 +119,9 @@ type bootstrapNodeTy struct {
 
 func bootstrapNodeHandler(w http.ResponseWriter, r *http.Request) {
 	var node *bootstrapNodeTy
-	err := json.NewDecoder(r.Body).Decode(node)
+	err := json.NewDecoder(r.Body).Decode(&node)
 	if err != nil {
-		errMsg := fmt.Sprintf("Body could not be desirialized: %s", err.Error())
+		errMsg := fmt.Sprintf("Body could not be deserialized: %s", err.Error())
 		http.Error(w, errMsg, http.StatusBadRequest)
 		return
 	}
@@ -130,7 +130,16 @@ func bootstrapNodeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errMsg, http.StatusBadRequest)
 		return
 	}
-	//TODO: Create node with incremented id
-	//TODO: Add node to ring
-	//TODO: Reply to node with its id
+	myNode.BsNextNodeId.Mu.Lock()
+	log.Println("Bootstraping node with id:", myNode.BsNextNodeId.Value)
+	myNode.Ring[node.PubKey] = NewNodeInfo(
+		myNode.BsNextNodeId.Value,
+		node.Hostname,
+		node.Port,
+		bck.PubKeyFromPem(node.PubKey),
+	)
+	myNode.BsNextNodeId.Value++
+	myNode.BsNextNodeId.Mu.Unlock()
+
+	fmt.Fprintf(w, "%d", myNode.Ring[node.PubKey].Id)
 }

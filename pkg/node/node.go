@@ -17,10 +17,9 @@ type Node struct {
 	Wallet        *bck.Wallet
 	IncBlockChn   chan *bck.Block
 	MinedBlockChn chan *bck.Block
-	Ip            string
-	Port          string
 	Ring          map[string]*NodeInfo
 	// TODO: add mutexes to lock necessary resources
+	BsNextNodeId *MuInt
 }
 
 var myNode *Node
@@ -30,21 +29,26 @@ func NewNode(currBlockId, bits int, ip, port string) *Node {
 		return myNode // enforces only one node per runtime
 	}
 	w := bck.NewWallet(bits)
-	walletInfo := w.GetWalletInfo()
-	myNodeInfo := NewNodeInfo(-1, "", "", walletInfo.PubKey)
+	myNodeInfo := NewNodeInfo(-1, ip, port, &w.PrivKey.PublicKey)
 	myNode = &Node{
 		Chain:         []*bck.Block{},
 		CurrBlockId:   currBlockId,
 		Wallet:        w,
 		IncBlockChn:   make(chan *bck.Block, 1),
 		MinedBlockChn: make(chan *bck.Block, 1),
-		Ip:            ip,
-		Port:          port,
 		Ring: map[string]*NodeInfo{
-			bck.PubKeyToPem(walletInfo.PubKey): myNodeInfo,
+			bck.PubKeyToPem(&w.PrivKey.PublicKey): myNodeInfo,
 		},
 	}
 	return myNode
+}
+
+func (n *Node) MakeBootstrap() {
+	log.Println("Becoming bootstrap...")
+	n.Id = 0
+	n.BsNextNodeId = &MuInt{
+		Value: 1,
+	}
 }
 
 // Fires a goroutine to listen for incoming or mined blocks
@@ -102,10 +106,6 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 		//! NOTE: MineBlock will fill the block's hash at the end
 		//! Assumption: MineBlock will increment the node.CurrBlockId
 		n.MineBlock(n.getLastBlock())
-		// n.Chain = append(n.Chain, bck.NewBlock(
-		// 	len(n.Chain),
-		// 	n.getLastBlock().CurrentHash,
-		// ))
 	}
 	return nil
 }
@@ -153,7 +153,7 @@ func (n *Node) ResolveConflict(block *bck.Block) error {
 
 //* RING
 /*
-// 1. Send Wallet pubkey (Connecting will provide the IP and port on its own)
+// 1. Send Wallet pubkey
 // 2. Receive node id
 // 3. Wait for info of all other nodes
 func (n *Node) ConnectToBootstrap() error {

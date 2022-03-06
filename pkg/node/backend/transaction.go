@@ -10,23 +10,6 @@ import (
 	"time"
 )
 
-type InputId string
-type InputSetTy map[InputId]struct{}
-
-func (set InputSetTy) Add(inputId string) {
-	set[InputId(inputId)] = struct{}{}
-}
-func (set InputSetTy) Has(inputId string) bool {
-	_, ok := set[InputId(inputId)]
-	return ok
-}
-func (set InputSetTy) Remove(inputId string) {
-	delete(set, InputId(inputId))
-}
-
-// func NewTxIn() TxIn {
-// }
-
 type TxOut struct {
 	Id            string         `json:"id"`
 	TransactionId string         `json:"transactionId"`
