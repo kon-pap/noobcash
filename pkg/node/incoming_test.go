@@ -2,6 +2,8 @@ package node
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -13,18 +15,22 @@ import (
 
 func TestRegisterNodesHandler(t *testing.T) {
 	t.Run("Send a single node", func(t *testing.T) {
+		privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
+		if err != nil {
+			t.Error(err)
+		}
 		jsNode, err := json.Marshal([]transferNodeTy{
-			{ //TODO: create a new node here for the test to work
+			{
 				Hostname: "localhost",
 				Port:     "8080",
-				PubKey:   backend.PubKeyToPem(&myNode.Wallet.PrivKey.PublicKey),
+				PubKey:   backend.PubKeyToPem(&privateKey.PublicKey),
 				Id:       2,
 			},
 		})
 		if err != nil {
 			log.Fatalln(err)
 		}
-		log.Println("Sending node:", string(jsNode))
+		// log.Println("Sending node:", string(jsNode))
 		body := bytes.NewReader(jsNode)
 		req := httptest.NewRequest("POST", "/register-nodes", body)
 		w := httptest.NewRecorder()

@@ -88,9 +88,11 @@ func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 */
 
 //* BLOCK
-/*
 func (n *Node) MineBlock(block *bck.Block) error {
+	return nil
 }
+
+/*
 // currhash is correct && previous_hash is actually the hash of the previous block
 func (n *Node) IsValidBlock(block *bck.Block) bool {
 }
@@ -111,8 +113,12 @@ func (n *Node) getLastBlock() *bck.Block {
 /*
 func (n *Node) IsValidChain() bool {
 }
+*/
 func (n *Node) ApplyChain(blocks []*bck.Block) error {
+	return nil
 }
+
+/*
 func (n *Node) ResolveConflict(block *bck.Block) error {
 }
 */

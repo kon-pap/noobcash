@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/kon-pap/noobcash/pkg/node"
-	"github.com/kon-pap/noobcash/pkg/node/backend"
 	"github.com/spf13/cobra"
 )
 
@@ -15,16 +14,16 @@ var rootCmd = &cobra.Command{
 	Long: `Noobcash is a peer-to-peer blockchain network supporting basic payments.
 Class project for the course "Distributed Systems" at the National Technical University of Athens`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		isBootstrap, _ := cmd.Flags().GetBool("bootstrap")
-		port, _ := cmd.Flags().GetString("port")
-		nodecnt, _ := cmd.Flags().GetInt("nodecnt")
+		// isBootstrap, _ := cmd.Flags().GetBool("bootstrap")
+		// nodecnt, _ := cmd.Flags().GetInt("nodecnt")
 		// wallet := backend.NewWallet(1024)
-		newNode := node.NewNode(0, 1024)
-		if isBootstrap {
-			genBlock := backend.CreateGenesisBlock(nodecnt, &newNode.Wallet.PrivKey.PublicKey)
-			fmt.Println(genBlock)
-		}
-		node.ServeApiForCli(port)
+		// newNode := node.NewNode(0, 1024)
+		// if isBootstrap {
+		// 	genBlock := backend.CreateGenesisBlock(nodecnt, &newNode.Wallet.PrivKey.PublicKey)
+		// 	fmt.Println(genBlock)
+		// }
+		apiport, _ := cmd.Flags().GetString("apiport")
+		node.ServeApiForCli(apiport)
 		return nil
 	},
 }
@@ -38,7 +37,6 @@ func Execute() {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.PersistentFlags().BoolP("bootstrap", "b", false, "Controls whether current node is bootstrap node or not")
-	rootCmd.PersistentFlags().StringP("port", "p", "9090", "Port to serve http api on")
+	rootCmd.PersistentFlags().StringP("apiport", "p", "9090", "Port to serve http api on")
 	rootCmd.PersistentFlags().IntP("nodecnt", "c", 5, "Number of nodes to bootstrap for")
 }
