@@ -11,17 +11,21 @@ import (
 
 type Node struct {
 	// chain, currBlockId, wallet, ring
-	Id          int
-	Chain       []*bck.Block
-	CurrBlockId int
-	Wallet      *bck.Wallet
-	Ring        map[string]*NodeInfo
+	Id            int
+	Chain         []*bck.Block
+	CurrBlockId   int
+	Wallet        *bck.Wallet
+	IncBlockChn   chan *bck.Block
+	MinedBlockChn chan *bck.Block
+	Ip            string
+	Port          string
+	Ring          map[string]*NodeInfo
 	// TODO: add mutexes to lock necessary resources
 }
 
 var myNode *Node
 
-func NewNode(currBlockId int, bits int) *Node {
+func NewNode(currBlockId, bits int, ip, port string) *Node {
 	if myNode != nil {
 		return myNode // enforces only one node per runtime
 	}
@@ -29,14 +33,38 @@ func NewNode(currBlockId int, bits int) *Node {
 	walletInfo := w.GetWalletInfo()
 	myNodeInfo := NewNodeInfo(-1, "", "", walletInfo.PubKey)
 	myNode = &Node{
-		Chain:       []*bck.Block{},
-		CurrBlockId: currBlockId,
-		Wallet:      w,
+		Chain:         []*bck.Block{},
+		CurrBlockId:   currBlockId,
+		Wallet:        w,
+		IncBlockChn:   make(chan *bck.Block, 1),
+		MinedBlockChn: make(chan *bck.Block, 1),
+		Ip:            ip,
+		Port:          port,
 		Ring: map[string]*NodeInfo{
 			bck.PubKeyToPem(walletInfo.PubKey): myNodeInfo,
 		},
 	}
 	return myNode
+}
+
+// Fires a goroutine to listen for incoming or mined blocks
+func (n *Node) SelectMinedOrIncomingBlock() {
+	go func() {
+		for {
+			select {
+			case minedBlock := <-n.MinedBlockChn:
+				//TODO: handle minedBlock
+				fmt.Println("Mined block:", minedBlock)
+			case incomingBlock := <-n.IncBlockChn:
+				//TODO: handle incomingBlock
+				fmt.Println("Incoming block:", incomingBlock)
+			}
+		}
+	}()
+}
+
+func (n *Node) IsBootstrap() bool {
+	return n.Id == 0
 }
 
 //* TRANSACTION
@@ -74,10 +102,10 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 		//! NOTE: MineBlock will fill the block's hash at the end
 		//! Assumption: MineBlock will increment the node.CurrBlockId
 		n.MineBlock(n.getLastBlock())
-		n.Chain = append(n.Chain, bck.NewBlock(
-			len(n.Chain),
-			n.getLastBlock().CurrentHash,
-		))
+		// n.Chain = append(n.Chain, bck.NewBlock(
+		// 	len(n.Chain),
+		// 	n.getLastBlock().CurrentHash,
+		// ))
 	}
 	return nil
 }
@@ -128,7 +156,7 @@ func (n *Node) ResolveConflict(block *bck.Block) error {
 // 1. Send Wallet pubkey (Connecting will provide the IP and port on its own)
 // 2. Receive node id
 // 3. Wait for info of all other nodes
-func (n *Node) ConnectToBootstrap(ip, port string) error {
+func (n *Node) ConnectToBootstrap() error {
 }
 
 // Send IP, port, pubkey of all nodes

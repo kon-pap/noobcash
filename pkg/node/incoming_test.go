@@ -13,7 +13,7 @@ import (
 	"github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
-func TestRegisterNodesHandler(t *testing.T) {
+func TestAcceptNodesHandler(t *testing.T) {
 	t.Run("Send a single node", func(t *testing.T) {
 		privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
 		if err != nil {
@@ -24,7 +24,7 @@ func TestRegisterNodesHandler(t *testing.T) {
 				Hostname: "localhost",
 				Port:     "8080",
 				PubKey:   backend.PubKeyToPem(&privateKey.PublicKey),
-				Id:       2,
+				Id:       1,
 			},
 		})
 		if err != nil {
@@ -32,7 +32,7 @@ func TestRegisterNodesHandler(t *testing.T) {
 		}
 		// log.Println("Sending node:", string(jsNode))
 		body := bytes.NewReader(jsNode)
-		req := httptest.NewRequest("POST", "/register-nodes", body)
+		req := httptest.NewRequest("POST", "/accept-nodes", body)
 		w := httptest.NewRecorder()
 		setupNodeHandler().ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
