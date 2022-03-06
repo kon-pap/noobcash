@@ -26,16 +26,6 @@ func NewNodeInfo(id int, hostname, port string, pubKey *rsa.PublicKey) *NodeInfo
 	return newNodeInfo
 }
 
-//* DRAFT
-// for {
-//   select {
-// 	case newBlock := <- { try to mine a block }:
-//   		handle newly mined block
-// 	case newBlock := <- { wait for incoming block }:
-// 	 	handle newly received block
-//   	}
-// }
-
 // To be called by Bootstrap node after all nodes are registered to him
 func (n *NodeInfo) SendNodeInfos() {
 }

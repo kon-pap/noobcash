@@ -12,9 +12,15 @@ import (
 
 func setupNodeHandler() *mux.Router {
 	r := mux.NewRouter()
-	r.HandleFunc("/register-nodes", registerNodesHandler).Methods("POST")
+	// Accepts a list of fellow nodes in its ring
+	r.HandleFunc("/accept-nodes", acceptNodesHandler).Methods("POST")
+	// Accepts a list of blocks to try and apply to the chain
 	r.HandleFunc("/submit-blocks", submitBlocksHandler).Methods("POST")
+	// Accepts a list of transactions to try and insert into blocks
 	r.HandleFunc("/submit-txs", submitTxsHandler).Methods("POST")
+	if myNode.IsBootstrap() { // only bootstrap node can accept new nodes
+		r.HandleFunc("/bootstrap-node", bootstrapNodeHandler).Methods("POST")
+	}
 	return r
 }
 
@@ -37,7 +43,7 @@ type transferNodeTy struct {
 	Id       int    `json:"id"`
 }
 
-func registerNodesHandler(w http.ResponseWriter, r *http.Request) {
+func acceptNodesHandler(w http.ResponseWriter, r *http.Request) {
 	var nodes []transferNodeTy
 	err := json.NewDecoder(r.Body).Decode(&nodes)
 	if err != nil || len(nodes) == 0 {
@@ -79,7 +85,10 @@ func submitBlocksHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errMsg, http.StatusBadRequest)
 		return
 	}
-	myNode.ApplyChain(blocks)
+	for _, currBlock := range blocks {
+		myNode.IncBlockChn <- currBlock
+	}
+	// myNode.ApplyChain(blocks)
 	fmt.Fprintf(w, "Accepted %d block(s)", len(blocks))
 }
 
@@ -100,4 +109,28 @@ func submitTxsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	fmt.Fprintf(w, "Accepted %d transaction(s)", len(txs))
+}
+
+type bootstrapNodeTy struct {
+	Hostname string `json:"hostname"`
+	Port     string `json:"port"`
+	PubKey   string `json:"pubKey"`
+}
+
+func bootstrapNodeHandler(w http.ResponseWriter, r *http.Request) {
+	var node *bootstrapNodeTy
+	err := json.NewDecoder(r.Body).Decode(node)
+	if err != nil {
+		errMsg := fmt.Sprintf("Body could not be desirialized: %s", err.Error())
+		http.Error(w, errMsg, http.StatusBadRequest)
+		return
+	}
+	if node.PubKey == "" {
+		errMsg := "Received node without public key"
+		http.Error(w, errMsg, http.StatusBadRequest)
+		return
+	}
+	//TODO: Create node with incremented id
+	//TODO: Add node to ring
+	//TODO: Reply to node with its id
 }
