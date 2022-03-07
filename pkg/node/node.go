@@ -1,46 +1,57 @@
 package node
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"strconv"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
+//TODO: implement logic for filling up blocks not in the Chain slice
+//TODO: implement logic for chain branches
+
+var BootstrapHostname string
+
 type Node struct {
-	// chain, currBlockId, wallet, ring
-	Id            int
-	Chain         []*bck.Block
-	CurrBlockId   int
-	Wallet        *bck.Wallet
-	IncBlockChn   chan *bck.Block
-	MinedBlockChn chan *bck.Block
-	Ring          map[string]*NodeInfo
-	// TODO: add mutexes to lock necessary resources
+	Id             int
+	Chain          []*bck.Block
+	CurrBlockId    int
+	Wallet         *bck.Wallet
+	IncBlockChan   chan *bck.Block
+	MinedBlockChan chan *bck.Block
+	Ring           map[string]*NodeInfo
+	PendingTxs     *TxQueue
+
+	info    *NodeInfo
+	apiport string
+
+	// Only used by bootstrap
 	BsNextNodeId *MuInt
 }
 
-var myNode *Node
-
-func NewNode(currBlockId, bits int, ip, port string) *Node {
-	if myNode != nil {
-		return myNode // enforces only one node per runtime
-	}
+func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 	w := bck.NewWallet(bits)
-	myNodeInfo := NewNodeInfo(-1, ip, port, &w.PrivKey.PublicKey)
-	myNode = &Node{
-		Chain:         []*bck.Block{},
-		CurrBlockId:   currBlockId,
-		Wallet:        w,
-		IncBlockChn:   make(chan *bck.Block, 1),
-		MinedBlockChn: make(chan *bck.Block, 1),
+	newNodeInfo := NewNodeInfo(-1, ip, port, &w.PrivKey.PublicKey)
+	newNode := &Node{
+		Chain:          []*bck.Block{},
+		CurrBlockId:    currBlockId,
+		Wallet:         w,
+		IncBlockChan:   make(chan *bck.Block, 1),
+		MinedBlockChan: make(chan *bck.Block, 1),
+		PendingTxs:     NewTxQueue(),
+		info:           newNodeInfo,
+		apiport:        apiport,
 		Ring: map[string]*NodeInfo{
-			bck.PubKeyToPem(&w.PrivKey.PublicKey): myNodeInfo,
+			bck.PubKeyToPem(&w.PrivKey.PublicKey): newNodeInfo,
 		},
 	}
-	return myNode
+	return newNode
 }
 
 func (n *Node) MakeBootstrap() {
@@ -51,20 +62,20 @@ func (n *Node) MakeBootstrap() {
 	}
 }
 
-// Fires a goroutine to listen for incoming or mined blocks
+// Listens for incoming or mined blocks
+//
+// Should be called as a goroutine
 func (n *Node) SelectMinedOrIncomingBlock() {
-	go func() {
-		for {
-			select {
-			case minedBlock := <-n.MinedBlockChn:
-				//TODO: handle minedBlock
-				fmt.Println("Mined block:", minedBlock)
-			case incomingBlock := <-n.IncBlockChn:
-				//TODO: handle incomingBlock
-				fmt.Println("Incoming block:", incomingBlock)
-			}
+	for {
+		select {
+		case minedBlock := <-n.MinedBlockChan:
+			//TODO: handle minedBlock
+			fmt.Println("Mined block:", minedBlock)
+		case incomingBlock := <-n.IncBlockChan:
+			//TODO: handle incomingBlock
+			fmt.Println("Incoming block:", incomingBlock)
 		}
-	}()
+	}
 }
 
 func (n *Node) IsBootstrap() bool {
@@ -116,12 +127,13 @@ func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 */
 
 //* BLOCK
-func (n *Node) MineBlock(block *bck.Block) error {
-	return nil
+// check block validity
+func (n *Node) MineBlock(block *bck.Block) {
 }
 
 /*
 // currhash is correct && previous_hash is actually the hash of the previous block
+// recheck transaction validity
 func (n *Node) IsValidBlock(block *bck.Block) bool {
 }
 func (n *Node) ApplyBlock(block *bck.Block) error {
@@ -142,9 +154,6 @@ func (n *Node) getLastBlock() *bck.Block {
 func (n *Node) IsValidChain() bool {
 }
 */
-func (n *Node) ApplyChain(blocks []*bck.Block) error {
-	return nil
-}
 
 /*
 func (n *Node) ResolveConflict(block *bck.Block) error {

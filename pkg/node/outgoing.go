@@ -13,15 +13,15 @@ type NodeInfo struct {
 	// channels for comms
 	Id       int
 	WInfo    *bck.WalletInfo
-	hostname string
-	port     string
+	Hostname string
+	Port     string
 }
 
 func NewNodeInfo(id int, hostname, port string, pubKey *rsa.PublicKey) *NodeInfo {
 	newNodeInfo := &NodeInfo{
 		WInfo:    bck.NewWalletInfo(pubKey),
-		hostname: hostname,
-		port:     port,
+		Hostname: hostname,
+		Port:     port,
 	}
 	return newNodeInfo
 }

@@ -35,7 +35,7 @@ func TestAcceptNodesHandler(t *testing.T) {
 		body := bytes.NewReader(jsNode)
 		req := httptest.NewRequest("POST", "/accept-nodes", body)
 		w := httptest.NewRecorder()
-		setupNodeHandler().ServeHTTP(w, req)
+		testNode.setupNodeHandler().ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 		}
@@ -57,7 +57,7 @@ func TestSubmitBlocksHandler(t *testing.T) {
 		body := bytes.NewReader(jsBlock)
 		req := httptest.NewRequest("POST", "/submit-blocks", body)
 		w := httptest.NewRecorder()
-		setupNodeHandler().ServeHTTP(w, req)
+		testNode.setupNodeHandler().ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
 			t.Error("Did not get expected HTTP status code, got", w.Code)
 		}
@@ -85,7 +85,7 @@ func TestBootstrapNodeHandler(t *testing.T) {
 		body := bytes.NewReader(jsNode)
 		req := httptest.NewRequest("POST", "/bootstrap-node", body)
 		w := httptest.NewRecorder()
-		setupNodeHandler().ServeHTTP(w, req)
+		testNode.setupNodeHandler().ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
 			t.Error("Did not get expected HTTP status code, got", w.Code, w.Body.String())
 			return
@@ -100,11 +100,11 @@ func TestBootstrapNodeHandler(t *testing.T) {
 
 func TestSubmitTxsHandler(t *testing.T) {
 	t.Run("Send a single transaction", func(t *testing.T) {
-		newTx, err := myNode.Wallet.CreateTx(1, &myNode.Wallet.PrivKey.PublicKey)
+		newTx, err := testNode.Wallet.CreateTx(1, &testNode.Wallet.PrivKey.PublicKey)
 		if err != nil {
 			log.Fatalln(err)
 		}
-		myNode.Wallet.SignTx(newTx)
+		testNode.Wallet.SignTx(newTx)
 		jsTx, err := json.Marshal([]*backend.Transaction{newTx})
 		if err != nil {
 			log.Fatalln(err)
@@ -113,7 +113,7 @@ func TestSubmitTxsHandler(t *testing.T) {
 		body := bytes.NewReader(jsTx)
 		req := httptest.NewRequest("POST", "/submit-txs", body)
 		w := httptest.NewRecorder()
-		setupNodeHandler().ServeHTTP(w, req)
+		testNode.setupNodeHandler().ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
 			t.Error("Did not get expected HTTP status code, got", w.Code)
 		}
