@@ -106,17 +106,17 @@ func (n *Node) IsValidTx(tx *bck.Transaction) bool {
 	}()
 }
 func (n *Node) AcceptTx(tx *bck.Transaction) error {
+	//! NOTE: MineBlock will fill the block's hash at the end
+	//! Assumption: MineBlock will increment the node.CurrBlockId
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
-	if n.getLastBlock() == nil {
-		return fmt.Errorf("internal error: no block in chain")
-	}
-	n.getLastBlock().AddTx(tx)
-	if n.getLastBlock().IsFull() {
-		//! NOTE: MineBlock will fill the block's hash at the end
-		//! Assumption: MineBlock will increment the node.CurrBlockId
-		n.MineBlock(n.getLastBlock())
+	n.PendingTxs.Enqueue(tx)
+	if n.PendingTxs.Len() >= bck.BlockCapacity {
+		newBlock := bck.NewBlock(n.CurrBlockId, n.getLastBlock().CurrentHash)
+		txs := n.PendingTxs.DequeueMany(bck.BlockCapacity)
+		newBlock.AddManyTxs(txs) // error handling not needed here
+		go n.MineBlock(newBlock)
 	}
 	return nil
 }
@@ -161,14 +161,56 @@ func (n *Node) ResolveConflict(block *bck.Block) error {
 */
 
 //* RING
+func (n *Node) ConnectToBootstrap() error {
+	sendContent, err := json.Marshal(bootstrapNodeTy{
+		Hostname: n.info.Hostname,
+		Port:     n.info.Port,
+		PubKey:   bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey),
+	})
+	if err != nil {
+		return err
+	}
+	sendBody := bytes.NewBuffer(sendContent)
+	body, err := GetResponseBody(
+		http.DefaultClient.Post(
+			fmt.Sprintf("http://%s/bootstrap-node", BootstrapHostname),
+			"application/json",
+			sendBody,
+		),
+	)
+	if err != nil {
+		return err
+	}
+	n.Id, err = strconv.Atoi(string(body))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 /*
 // 1. Send Wallet pubkey
 // 2. Receive node id
 // 3. Wait for info of all other nodes
-func (n *Node) ConnectToBootstrap() error {
-}
 
 // Send IP, port, pubkey of all nodes
 func (n *Node) BroadcastRingInfo() error {
 }
 */
+
+func (n *Node) Start() error {
+	// Start API server
+	go n.ServeApiForCli(n.apiport)
+	go n.ServeApiForNodes(n.info.Port)
+
+	if !n.IsBootstrap() {
+		err := n.ConnectToBootstrap()
+		if err != nil {
+			return err
+		}
+	}
+
+	go n.SelectMinedOrIncomingBlock()
+
+	return nil
+}
