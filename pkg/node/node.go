@@ -110,25 +110,66 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 	return nil
 }
 
+// TODO implement this
+
+/*
+
+
+ */
+func (n *Node) ApplyTx(tx *bck.Transaction) error {
+	if !n.IsValidTx(tx) {
+		return fmt.Errorf("transaction is not valid")
+	}
+	senderNodeWalletInfo := n.Ring[bck.PubKeyToPem(tx.SenderAddress)].WInfo
+	receiverWalletInfo := n.Ring[bck.PubKeyToPem(tx.ReceiverAddress)].WInfo
+	//Utxos are used as Inputs to the transaction
+
+	amountToBeSent := senderNodeWalletInfo.Utxos[bck.PubKeyToPem(tx.SenderAddress)].Amount
+	//Remove the amount from sender node's utxos
+	senderNodeWalletInfo.Balance -= amountToBeSent
+	receiverWalletInfo.Balance += amountToBeSent
+
+	// remove transaction from inputs
+	tx.Inputs.Remove(string(tx.Id))
+
+	//create new outputs for sender and receiver
+	senderTxOut := bck.NewTxOut(tx.SenderAddress, senderNodeWalletInfo.Balance)
+	receiverTxOut := bck.NewTxOut(tx.ReceiverAddress, receiverWalletInfo.Balance)
+
+	tx.Outputs[bck.PubKeyToPem(tx.SenderAddress)] = senderTxOut
+	tx.Outputs[bck.PubKeyToPem(tx.ReceiverAddress)] = receiverTxOut
+
+	//update utxos
+	senderNodeWalletInfo.Utxos = tx.Outputs
+	receiverWalletInfo.Utxos = tx.Outputs
+
+	return nil
+
+}
+
 /*
 func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 }
 */
 
 //* BLOCK
+// TODO implement this
 func (n *Node) MineBlock(block *bck.Block) error {
 	return nil
 }
 
-/*
 // currhash is correct && previous_hash is actually the hash of the previous block
-func (n *Node) IsValidBlock(block *bck.Block) bool {
-}
+/*
 func (n *Node) ApplyBlock(block *bck.Block) error {
 }
 func (n *Node) BroadcastBlock(block *bck.Block) error {
 }
 */
+//might need to check if nonce is correct
+func (n *Node) IsValidBlock(block *bck.Block) bool {
+	lastBlockHash := n.getLastBlock().CurrentHash
+	return string(block.CurrentHash) == string(lastBlockHash)
+}
 
 //* CHAIN
 func (n *Node) getLastBlock() *bck.Block {
