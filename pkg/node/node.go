@@ -121,24 +121,17 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 	return nil
 }
 
-// TODO implement this
-
-/*
-
-
- */
+//TODO: Ensure thread-safety
+//! note: extra effort was made to facilitate support for multiple receivers per transaction
 func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
 	stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
-	stringReceiverAddress := bck.PubKeyToPem(tx.ReceiverAddress)
 	stringNodeAddress := bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)
 
-	thisIsSender := stringSenderAddress == stringNodeAddress
-	thisIsReceiver := stringReceiverAddress == stringNodeAddress
-
 	senderWallet := n.Ring[stringSenderAddress].WInfo
+	thisIsSender := stringSenderAddress == stringNodeAddress
 
 	for txInId := range tx.Inputs {
 		previousUtxo := senderWallet.Utxos[string(txInId)]
@@ -153,11 +146,13 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	}
 
 	for _, txOut := range tx.Outputs {
-		receiverWallet := n.Ring[bck.PubKeyToPem(txOut.Owner)].WInfo
+		stringReceiverAddress := bck.PubKeyToPem(txOut.Owner)
+		receiverWallet := n.Ring[stringReceiverAddress].WInfo
+
 		receiverWallet.Balance += txOut.Amount // increase receiver's balance
 		receiverWallet.Utxos[txOut.Id] = txOut // add new txOut to receiver's utxos
 		// if this wallet is the receiver then update the private state as well
-		if thisIsReceiver {
+		if stringReceiverAddress == stringNodeAddress {
 			n.Wallet.Balance += txOut.Amount
 			n.Wallet.Utxos[txOut.Id] = txOut
 		}
