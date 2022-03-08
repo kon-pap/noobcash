@@ -16,7 +16,13 @@ var bootstrapCmd = &cobra.Command{
 
 		nodecnt, _ := cmd.Flags().GetInt("nodecnt")
 		genBlock := backend.CreateGenesisBlock(nodecnt, &newNode.Wallet.PrivKey.PublicKey)
-		fmt.Println(genBlock)
+		if genBlock == nil {
+			return fmt.Errorf("genesis block creation failed")
+		}
+		if err := newNode.ApplyBlock(genBlock); err != nil {
+			return err
+		}
+		// fmt.Println(genBlock)
 
 		newNode.Start()
 		return nil
@@ -24,7 +30,7 @@ var bootstrapCmd = &cobra.Command{
 }
 
 func init() {
-	bootstrapCmd.PersistentFlags().IntP("nodecnt", "c", 5, "Number of nodes to bootstrap for")
+	bootstrapCmd.PersistentFlags().Int("nodecnt", 5, "Number of nodes to bootstrap for")
 
 	rootCmd.AddCommand(bootstrapCmd)
 }

@@ -84,6 +84,11 @@ func (n *Node) IsBootstrap() bool {
 
 //* TRANSACTION
 func (n *Node) IsValidSig(tx *bck.Transaction) bool {
+	// Genesis transaction is valid
+	// log.Fatalln(bck.HexDecodeByteSlice())
+	if tx.SenderAddress == nil {
+		return true
+	}
 	err := rsa.VerifyPKCS1v15(tx.SenderAddress, crypto.SHA256, tx.Id, tx.Signature)
 	if err == nil {
 		log.Println("Signature validation failed")
@@ -130,18 +135,21 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
 	stringNodeAddress := bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)
 
-	senderWallet := n.Ring[stringSenderAddress].WInfo
-	thisIsSender := stringSenderAddress == stringNodeAddress
+	// Skip this if tx is the genesis transaction
+	if tx.SenderAddress != nil {
+		senderWallet := n.Ring[stringSenderAddress].WInfo
+		thisIsSender := stringSenderAddress == stringNodeAddress
 
-	for txInId := range tx.Inputs {
-		previousUtxo := senderWallet.Utxos[string(txInId)]
-		senderWallet.Balance -= previousUtxo.Amount
-		delete(senderWallet.Utxos, string(txInId))
+		for txInId := range tx.Inputs {
+			previousUtxo := senderWallet.Utxos[string(txInId)]
+			senderWallet.Balance -= previousUtxo.Amount
+			delete(senderWallet.Utxos, string(txInId))
 
-		// if this wallet is the sender then update the private state as well
-		if thisIsSender {
-			n.Wallet.Balance -= previousUtxo.Amount
-			delete(n.Wallet.Utxos, string(txInId))
+			// if this wallet is the sender then update the private state as well
+			if thisIsSender {
+				n.Wallet.Balance -= previousUtxo.Amount
+				delete(n.Wallet.Utxos, string(txInId))
+			}
 		}
 	}
 
@@ -168,8 +176,30 @@ func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 */
 
 //* BLOCK
+func (n *Node) IsValidBlock(block *bck.Block) bool {
+	// GenesisBlock is valid
+	if n.CurrBlockId == 0 && block.Index == 0 {
+		return true
+	}
+
+	lastBlockHash := n.getLastBlock().CurrentHash
+	return string(block.CurrentHash) == string(lastBlockHash)
+}
+
 // check block validity
 func (n *Node) MineBlock(block *bck.Block) {
+}
+func (n *Node) ApplyBlock(block *bck.Block) error {
+	if !n.IsValidBlock(block) {
+		return fmt.Errorf("block is not valid")
+	}
+	log.Println("Applying new block with", len(block.Transactions), "transactions")
+	for _, tx := range block.Transactions {
+		if err := n.ApplyTx(tx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 /*
@@ -177,16 +207,10 @@ func (n *Node) MineBlock(block *bck.Block) {
 // recheck transaction validity
 func (n *Node) IsValidBlock(block *bck.Block) bool {
 }
-func (n *Node) ApplyBlock(block *bck.Block) error {
-}
 func (n *Node) BroadcastBlock(block *bck.Block) error {
 }
 */
 //might need to check if nonce is correct
-func (n *Node) IsValidBlock(block *bck.Block) bool {
-	lastBlockHash := n.getLastBlock().CurrentHash
-	return string(block.CurrentHash) == string(lastBlockHash)
-}
 
 //* CHAIN
 func (n *Node) getLastBlock() *bck.Block {
@@ -256,7 +280,9 @@ func (n *Node) Start() error {
 		}
 	}
 
-	go n.SelectMinedOrIncomingBlock()
+	// comment out go keyword to not exit early
+	/*go*/
+	n.SelectMinedOrIncomingBlock()
 
 	return nil
 }

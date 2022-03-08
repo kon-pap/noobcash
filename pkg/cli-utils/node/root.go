@@ -35,7 +35,7 @@ func setupNode(cmd *cobra.Command) *node.Node {
 	apiport, _ := cmd.Flags().GetString("apiport")
 	newNode := node.NewNode(0, 1024, ip, nodeport, apiport)
 	node.BootstrapHostname, _ = cmd.Flags().GetString("bootstrap")
-	backend.BlockCapacity, _ = cmd.Flags().GetInt("blockcapacity")
+	backend.BlockCapacity, _ = cmd.Flags().GetInt("capacity")
 	return newNode
 }
 
@@ -51,5 +51,5 @@ func init() {
 	rootCmd.PersistentFlags().StringP("apiport", "p", "9090", "Port to serve http api on")
 	rootCmd.PersistentFlags().StringP("hostname", "n", "localhost:7070", "IP on which this node's node-api is available")
 	rootCmd.PersistentFlags().StringP("bootstrap", "b", "localhost:7070", "Hostname of the bootstrap node")
-	rootCmd.PersistentFlags().IntP("blockcapacity", "c", 10, "Transaction capacity of a block")
+	rootCmd.PersistentFlags().IntP("capacity", "c", 10, "Transaction capacity of a block")
 }

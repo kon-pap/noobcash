@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 )
@@ -129,7 +130,10 @@ func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
 		Nonce:        "0",
 		PreviousHash: []byte("1"),
 	}
-	b.AddTx(initTx)
+	if err := b.AddTx(initTx); err != nil {
+		log.Println(err)
+		return nil
+	}
 	b.ComputeAndFillHash()
 	return b
 }
