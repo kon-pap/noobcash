@@ -14,7 +14,7 @@ type TxOut struct {
 	Id            string         `json:"id"`
 	TransactionId string         `json:"transactionId"`
 	Amount        int            `json:"amount"`
-	Owner         *rsa.PublicKey `json:"-"`
+	Owner         *rsa.PublicKey `json:"owner"`
 }
 
 func NewTxOut(owner *rsa.PublicKey, amount int) *TxOut {
@@ -23,20 +23,37 @@ func NewTxOut(owner *rsa.PublicKey, amount int) *TxOut {
 		Owner:  owner,
 	}
 }
-func (txout *TxOut) ComputeAndFillHash() {
-	type txOutJson struct {
-		Id            string `json:"id"`
-		TransactionId string `json:"transactionId"`
-		Amount        int    `json:"amount"`
-		Owner         string `json:"owner"`
-	}
-	tmpTxout := txOutJson{
+
+type txOutJson struct {
+	Id            string `json:"id"`
+	TransactionId string `json:"transactionId"`
+	Amount        int    `json:"amount"`
+	Owner         string `json:"owner"`
+}
+
+func (txout *TxOut) MarshalJSON() ([]byte, error) {
+	return json.Marshal(txOutJson{
 		Id:            txout.Id,
 		TransactionId: txout.TransactionId,
 		Amount:        txout.Amount,
 		Owner:         PubKeyToPem(txout.Owner),
+	})
+}
+func (txout *TxOut) UnmarshalJSON(b []byte) error {
+	var tmpTxOut txOutJson
+	err := json.Unmarshal(b, &tmpTxOut)
+	if err != nil {
+		return err
 	}
-	bytes, err := json.Marshal(tmpTxout)
+	txout.Id = tmpTxOut.Id
+	txout.TransactionId = tmpTxOut.TransactionId
+	txout.Amount = tmpTxOut.Amount
+	txout.Owner = PubKeyFromPem(tmpTxOut.Owner)
+	return nil
+}
+
+func (txout *TxOut) ComputeAndFillHash() {
+	bytes, err := json.Marshal(txout)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -145,7 +162,7 @@ func NewGenesisTransaction(to *rsa.PublicKey, amount int) *Transaction {
 
 	newTx.Outputs[newTxOut.Id] = newTxOut
 	newTx.ComputeAndFillHash()
-	newTxOut.TransactionId = HexEncodeByteSlice(newTx.Id)
+	// newTxOut.TransactionId = HexEncodeByteSlice(newTx.Id)
 
 	return newTx
 }
@@ -158,4 +175,8 @@ func (tx *Transaction) ComputeAndFillHash() {
 	}
 	byteArray := (sha256.Sum256(txInfoBytes))
 	tx.Id = byteArray[:]
+	encodedId := HexEncodeByteSlice(tx.Id)
+	for _, txOut := range tx.Outputs {
+		txOut.TransactionId = encodedId
+	}
 }

@@ -121,6 +121,52 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 	return nil
 }
 
+// TODO implement this
+
+/*
+
+
+ */
+func (n *Node) ApplyTx(tx *bck.Transaction) error {
+	if !n.IsValidTx(tx) {
+		return fmt.Errorf("transaction is not valid")
+	}
+	stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
+	stringReceiverAddress := bck.PubKeyToPem(tx.ReceiverAddress)
+	stringNodeAddress := bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)
+
+	thisIsSender := stringSenderAddress == stringNodeAddress
+	thisIsReceiver := stringReceiverAddress == stringNodeAddress
+
+	senderWallet := n.Ring[stringSenderAddress].WInfo
+
+	for txInId := range tx.Inputs {
+		previousUtxo := senderWallet.Utxos[string(txInId)]
+		senderWallet.Balance -= previousUtxo.Amount
+		delete(senderWallet.Utxos, string(txInId))
+
+		// if this wallet is the sender then update the private state as well
+		if thisIsSender {
+			n.Wallet.Balance -= previousUtxo.Amount
+			delete(n.Wallet.Utxos, string(txInId))
+		}
+	}
+
+	for _, txOut := range tx.Outputs {
+		receiverWallet := n.Ring[bck.PubKeyToPem(txOut.Owner)].WInfo
+		receiverWallet.Balance += txOut.Amount // increase receiver's balance
+		receiverWallet.Utxos[txOut.Id] = txOut // add new txOut to receiver's utxos
+		// if this wallet is the receiver then update the private state as well
+		if thisIsReceiver {
+			n.Wallet.Balance += txOut.Amount
+			n.Wallet.Utxos[txOut.Id] = txOut
+		}
+	}
+
+	return nil
+
+}
+
 /*
 func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 }
@@ -141,6 +187,11 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 func (n *Node) BroadcastBlock(block *bck.Block) error {
 }
 */
+//might need to check if nonce is correct
+func (n *Node) IsValidBlock(block *bck.Block) bool {
+	lastBlockHash := n.getLastBlock().CurrentHash
+	return string(block.CurrentHash) == string(lastBlockHash)
+}
 
 //* CHAIN
 func (n *Node) getLastBlock() *bck.Block {
