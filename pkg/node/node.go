@@ -120,28 +120,37 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
-	senderNodeWalletInfo := n.Ring[bck.PubKeyToPem(tx.SenderAddress)].WInfo
-	receiverWalletInfo := n.Ring[bck.PubKeyToPem(tx.ReceiverAddress)].WInfo
-	//Utxos are used as Inputs to the transaction
+	stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
+	stringReceiverAddress := bck.PubKeyToPem(tx.ReceiverAddress)
+	stringNodeAddress := bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)
 
-	amountToBeSent := senderNodeWalletInfo.Utxos[bck.PubKeyToPem(tx.SenderAddress)].Amount
-	//Remove the amount from sender node's utxos
-	senderNodeWalletInfo.Balance -= amountToBeSent
-	receiverWalletInfo.Balance += amountToBeSent
+	thisIsSender := stringSenderAddress == stringNodeAddress
+	thisIsReceiver := stringReceiverAddress == stringNodeAddress
 
-	// remove transaction from inputs
-	tx.Inputs.Remove(string(tx.Id))
+	senderWallet := n.Ring[stringSenderAddress].WInfo
 
-	//create new outputs for sender and receiver
-	senderTxOut := bck.NewTxOut(tx.SenderAddress, senderNodeWalletInfo.Balance)
-	receiverTxOut := bck.NewTxOut(tx.ReceiverAddress, receiverWalletInfo.Balance)
+	for txInId := range tx.Inputs {
+		previousUtxo := senderWallet.Utxos[string(txInId)]
+		senderWallet.Balance -= previousUtxo.Amount
+		delete(senderWallet.Utxos, string(txInId))
 
-	tx.Outputs[bck.PubKeyToPem(tx.SenderAddress)] = senderTxOut
-	tx.Outputs[bck.PubKeyToPem(tx.ReceiverAddress)] = receiverTxOut
+		// if this wallet is the sender then update the private state as well
+		if thisIsSender {
+			n.Wallet.Balance -= previousUtxo.Amount
+			delete(n.Wallet.Utxos, string(txInId))
+		}
+	}
 
-	//update utxos
-	senderNodeWalletInfo.Utxos = tx.Outputs
-	receiverWalletInfo.Utxos = tx.Outputs
+	for _, txOut := range tx.Outputs {
+		receiverWallet := n.Ring[bck.PubKeyToPem(txOut.Owner)].WInfo
+		receiverWallet.Balance += txOut.Amount // increase receiver's balance
+		receiverWallet.Utxos[txOut.Id] = txOut // add new txOut to receiver's utxos
+		// if this wallet is the receiver then update the private state as well
+		if thisIsReceiver {
+			n.Wallet.Balance += txOut.Amount
+			n.Wallet.Utxos[txOut.Id] = txOut
+		}
+	}
 
 	return nil
 
