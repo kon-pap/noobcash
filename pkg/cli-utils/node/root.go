@@ -29,6 +29,7 @@ func getNodeApiHostDetails(cmd *cobra.Command) (string, string) {
 	return x[0], x[1]
 }
 
+// Get cli flags create and set up a new node
 func setupNode(cmd *cobra.Command) *node.Node {
 	ip, nodeport := getNodeApiHostDetails(cmd)
 	apiport, _ := cmd.Flags().GetString("apiport")

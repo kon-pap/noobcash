@@ -19,7 +19,6 @@ var bootstrapCmd = &cobra.Command{
 		fmt.Println(genBlock)
 
 		newNode.Start()
-		//TODO: startup node and handle incoming nodes
 		return nil
 	},
 }
