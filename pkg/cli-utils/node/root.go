@@ -18,7 +18,9 @@ Class project for the course "Distributed Systems" at the National Technical Uni
 	RunE: func(cmd *cobra.Command, args []string) error {
 		newNode := setupNode(cmd)
 		// fmt.Println(newNode)
-		newNode.Start()
+		if err := newNode.Start(); err != nil {
+			return err
+		}
 		return nil
 	},
 }
@@ -36,6 +38,7 @@ func setupNode(cmd *cobra.Command) *node.Node {
 	newNode := node.NewNode(0, 1024, ip, nodeport, apiport)
 	node.BootstrapHostname, _ = cmd.Flags().GetString("bootstrap")
 	backend.BlockCapacity, _ = cmd.Flags().GetInt("capacity")
+	backend.Difficulty, _ = cmd.Flags().GetInt("difficulty")
 	return newNode
 }
 
@@ -52,4 +55,5 @@ func init() {
 	rootCmd.PersistentFlags().StringP("hostname", "n", "localhost:7070", "IP on which this node's node-api is available")
 	rootCmd.PersistentFlags().StringP("bootstrap", "b", "localhost:7070", "Hostname of the bootstrap node")
 	rootCmd.PersistentFlags().IntP("capacity", "c", 10, "Transaction capacity of a block")
+	rootCmd.PersistentFlags().IntP("difficulty", "d", 1, "Difficulty of mining a block")
 }

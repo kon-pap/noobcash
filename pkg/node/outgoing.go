@@ -19,6 +19,7 @@ type NodeInfo struct {
 
 func NewNodeInfo(id int, hostname, port string, pubKey *rsa.PublicKey) *NodeInfo {
 	newNodeInfo := &NodeInfo{
+		Id:       id,
 		WInfo:    bck.NewWalletInfo(pubKey),
 		Hostname: hostname,
 		Port:     port,

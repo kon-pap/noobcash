@@ -13,6 +13,7 @@ import (
 
 // Defines the capacity of transactions inside a block
 var BlockCapacity int
+var Difficulty int
 
 type Block struct {
 	Index        int

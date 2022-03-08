@@ -39,6 +39,7 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 	w := bck.NewWallet(bits)
 	newNodeInfo := NewNodeInfo(-1, ip, port, &w.PrivKey.PublicKey)
 	newNode := &Node{
+		Id:             -1,
 		Chain:          []*bck.Block{},
 		CurrBlockId:    currBlockId,
 		Wallet:         w,
@@ -57,6 +58,7 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 func (n *Node) MakeBootstrap() {
 	log.Println("Becoming bootstrap...")
 	n.Id = 0
+	n.Ring[bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)].Id = 0
 	n.BsNextNodeId = &MuInt{
 		Value: 1,
 	}
@@ -132,11 +134,11 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
-	stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
 	stringNodeAddress := bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)
 
 	// Skip this if tx is the genesis transaction
 	if tx.SenderAddress != nil {
+		stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
 		senderWallet := n.Ring[stringSenderAddress].WInfo
 		thisIsSender := stringSenderAddress == stringNodeAddress
 
@@ -188,7 +190,11 @@ func (n *Node) IsValidBlock(block *bck.Block) bool {
 
 // check block validity
 func (n *Node) MineBlock(block *bck.Block) {
+
+	// Mined block is sent to be processed
+	n.MinedBlockChan <- block
 }
+
 func (n *Node) ApplyBlock(block *bck.Block) error {
 	if !n.IsValidBlock(block) {
 		return fmt.Errorf("block is not valid")
@@ -252,6 +258,7 @@ func (n *Node) ConnectToBootstrap() error {
 		return err
 	}
 	n.Id, err = strconv.Atoi(string(body))
+	n.Ring[bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)].Id = n.Id
 	if err != nil {
 		return err
 	}
@@ -276,7 +283,7 @@ func (n *Node) Start() error {
 	if !n.IsBootstrap() {
 		err := n.ConnectToBootstrap()
 		if err != nil {
-			return err
+			return fmt.Errorf("expected an integer as id, got '%s'", err)
 		}
 	}
 
