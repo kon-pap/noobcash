@@ -281,10 +281,12 @@ func (n *Node) Start() error {
 	go n.ServeApiForNodes(n.info.Port)
 
 	if !n.IsBootstrap() {
+		log.Println("Connecting to bootstrap...")
 		err := n.ConnectToBootstrap()
 		if err != nil {
 			return fmt.Errorf("expected an integer as id, got '%s'", err)
 		}
+		log.Println("Assigned id", n.Id)
 	}
 
 	// comment out go keyword to not exit early
