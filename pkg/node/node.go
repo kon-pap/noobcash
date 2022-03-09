@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
@@ -188,8 +189,13 @@ func (n *Node) IsValidBlock(block *bck.Block) bool {
 	}
 	//check if Hash(nonce + Hash(block)) starts with n zeros
 	//same process as mining
+	dif := strings.Repeat("0", bck.Difficulty)
+	rand.Seed(time.Now().UnixNano())
+	h := sha256.New()
+	h.Write(block.CurrentHash)
+	h.Write([]byte(block.Nonce))
 	lastBlockHash := n.getLastBlock().CurrentHash
-	return string(block.CurrentHash) == string(lastBlockHash)
+	return string(block.CurrentHash) == string(lastBlockHash) && bck.HexEncodeByteSlice(h.Sum(nil))[:bck.Difficulty] == dif
 }
 
 // check block validity
@@ -200,10 +206,8 @@ func (n *Node) MineBlock(block *bck.Block) {
 	//Hash(nonce + Hash(bck)) starts with n zeros
 	//The only way is guess nonce and check if it's ok
 
-	dif := ""
-	for i := 0; i < bck.Difficulty; i++ {
-		dif += "0"
-	}
+	dif := strings.Repeat("0", bck.Difficulty)
+
 	rand.Seed(time.Now().UnixNano())
 	h := sha256.New()
 	h.Write(block.CurrentHash)
