@@ -128,7 +128,7 @@ func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
 	b := &Block{
 		Index:        0,
 		Timestamp:    time.Now(),
-		Nonce:        "0",
+		Nonce:        "00",
 		PreviousHash: []byte("1"),
 	}
 	if err := b.AddTx(initTx); err != nil {
