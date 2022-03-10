@@ -15,6 +15,8 @@ type MuInt struct {
 	Value int
 }
 
+// Doubly linked list used as transaction queue
+// wraps a mutex to facilitate multi-threaded access
 type TxQueue struct {
 	Mu    sync.Mutex
 	queue *list.List
@@ -67,4 +69,32 @@ func GetResponseBody(resp *http.Response, err error) (string, error) {
 		return "", err
 	}
 	return string(body), nil
+}
+
+type Job func()
+
+// Utility struct to setup, start, and wait for jobs to finish
+type JobGroup struct {
+	wg   sync.WaitGroup
+	jobs []Job
+}
+
+func (jg *JobGroup) Add(job Job) {
+	jg.jobs = append(jg.jobs, job)
+	jg.wg.Add(1)
+}
+func (jg *JobGroup) Run() {
+	for _, job := range jg.jobs {
+		go job()
+	}
+}
+
+func (jg *JobGroup) RunAndWait() {
+	for _, job := range jg.jobs {
+		go func(job Job) {
+			defer jg.wg.Done()
+			job()
+		}(job)
+	}
+	jg.wg.Wait()
 }

@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
@@ -321,13 +320,7 @@ func (n *Node) BroadcastRingInfo() error {
 
 func (n *Node) Start() error {
 
-	var wg sync.WaitGroup
-	wg.Add(3)
-
-	go func() {
-		defer wg.Done()
-		n.SelectMinedOrIncomingBlock()
-	}()
+	var jg JobGroup
 
 	if !n.IsBootstrap() {
 		log.Println("Connecting to bootstrap...")
@@ -342,23 +335,13 @@ func (n *Node) Start() error {
 			return fmt.Errorf("genesis block creation failed")
 		}
 		n.MineBlock(genBlock)
-
-		// if err := n.ApplyBlock(genBlock); err != nil {
-		// 	return err
-		// }
 	}
 
-	//TODO(ORF): use a wait-group to properly wait for the goroutines to exit
-	go func() {
-		defer wg.Done()
-		n.ServeApiForCli(n.apiport)
-	}()
-	go func() {
-		defer wg.Done()
-		n.ServeApiForNodes(n.info.Port)
-	}()
+	jg.Add(n.SelectMinedOrIncomingBlock)
+	jg.Add(func() { n.ServeApiForCli(n.apiport) })
+	jg.Add(func() { n.ServeApiForNodes(n.info.Port) })
 
-	wg.Wait()
+	jg.RunAndWait()
 
 	return nil
 }
