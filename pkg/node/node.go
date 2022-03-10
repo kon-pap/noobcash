@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
@@ -319,7 +320,14 @@ func (n *Node) BroadcastRingInfo() error {
 */
 
 func (n *Node) Start() error {
-	go n.SelectMinedOrIncomingBlock()
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		n.SelectMinedOrIncomingBlock()
+	}()
 
 	if !n.IsBootstrap() {
 		log.Println("Connecting to bootstrap...")
@@ -341,8 +349,16 @@ func (n *Node) Start() error {
 	}
 
 	//TODO(ORF): use a wait-group to properly wait for the goroutines to exit
-	go n.ServeApiForCli(n.apiport)
-	n.ServeApiForNodes(n.info.Port)
+	go func() {
+		defer wg.Done()
+		n.ServeApiForCli(n.apiport)
+	}()
+	go func() {
+		defer wg.Done()
+		n.ServeApiForNodes(n.info.Port)
+	}()
+
+	wg.Wait()
 
 	return nil
 }
