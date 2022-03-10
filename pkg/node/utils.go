@@ -39,7 +39,7 @@ func (tq *TxQueue) Dequeue() *bck.Transaction {
 }
 
 func (tq *TxQueue) DequeueMany(n int) []*bck.Transaction {
-	var txs []*bck.Transaction
+	txs := make([]*bck.Transaction, n)
 	for i := 0; i < n; i++ {
 		tx := tq.Dequeue()
 		if tx == nil {
@@ -54,6 +54,8 @@ func (tq *TxQueue) Len() int {
 	return tq.queue.Len()
 }
 
+// Helper func that extracts the complete body from the result of an
+// http client call
 func GetResponseBody(resp *http.Response, err error) (string, error) {
 	if err != nil {
 		return "", err
