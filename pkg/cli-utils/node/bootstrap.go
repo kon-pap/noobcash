@@ -12,14 +12,6 @@ var bootstrapCmd = &cobra.Command{
 		nodecnt, _ := cmd.Flags().GetInt("nodecnt")
 		newNode.MakeBootstrap(nodecnt)
 
-		// genBlock := backend.CreateGenesisBlock(nodecnt, &newNode.Wallet.PrivKey.PublicKey)
-		// if genBlock == nil {
-		// 	return fmt.Errorf("genesis block creation failed")
-		// }
-		// if err := newNode.ApplyBlock(genBlock); err != nil {
-		// 	return err
-		// }
-
 		if err := newNode.Start(); err != nil {
 			return err
 		}

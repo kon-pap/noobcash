@@ -70,23 +70,6 @@ func (n *Node) MakeBootstrap(nodecnt int) {
 	n.nodecnt = nodecnt
 }
 
-// Listens for incoming or mined blocks
-//
-// Should be called as a goroutine
-func (n *Node) SelectMinedOrIncomingBlock() {
-	log.Println("Setting up block handler...")
-	for {
-		select {
-		case minedBlock := <-n.MinedBlockChan:
-			//TODO: handle minedBlock
-			fmt.Println("Mined block:", minedBlock)
-		case incomingBlock := <-n.IncBlockChan:
-			//TODO: handle incomingBlock
-			fmt.Println("Incoming block:", incomingBlock)
-		}
-	}
-}
-
 func (n *Node) IsBootstrap() bool {
 	return n.Id == 0
 }
@@ -245,6 +228,7 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 			return err
 		}
 	}
+	log.Println("Block successfully applied")
 	return nil
 }
 
@@ -305,6 +289,25 @@ func (n *Node) ConnectToBootstrap() error {
 	return nil
 }
 
+// Listens for incoming or mined blocks
+//
+// Should be called as a goroutine
+func (n *Node) SelectMinedOrIncomingBlock() {
+	log.Println("Setting up block handler...")
+	for {
+		select {
+		case minedBlock := <-n.MinedBlockChan:
+			//TODO: handle minedBlock
+			log.Println("Processing mined block...")
+			n.ApplyBlock(minedBlock)
+		case incomingBlock := <-n.IncBlockChan:
+			//TODO: handle incomingBlock
+			log.Println("Processing received block...")
+			fmt.Println("Incoming block:", incomingBlock)
+		}
+	}
+}
+
 /*
 // 1. Send Wallet pubkey
 // 2. Receive node id
@@ -326,15 +329,15 @@ func (n *Node) Start() error {
 		}
 		log.Println("Assigned id", n.Id)
 	} else {
-		// TODO(ORF): Make it so the block is not direectly applied
-		// TODO(ORF): but rather goes through the proper block path
 		genBlock := bck.CreateGenesisBlock(n.nodecnt, &n.Wallet.PrivKey.PublicKey)
 		if genBlock == nil {
 			return fmt.Errorf("genesis block creation failed")
 		}
-		if err := n.ApplyBlock(genBlock); err != nil {
-			return err
-		}
+		n.MineBlock(genBlock)
+
+		// if err := n.ApplyBlock(genBlock); err != nil {
+		// 	return err
+		// }
 	}
 
 	//TODO(ORF): use a wait-group to properly wait for the goroutines to exit
