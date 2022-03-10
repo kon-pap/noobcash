@@ -1,7 +1,11 @@
 package node
 
 import (
+	"bytes"
 	"crypto/rsa"
+	"fmt"
+	"log"
+	"net/http"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
@@ -27,9 +31,32 @@ func NewNodeInfo(id int, hostname, port string, pubKey *rsa.PublicKey) *NodeInfo
 	return newNodeInfo
 }
 
-// To be called by Bootstrap node after all nodes are registered to him
-func (n *NodeInfo) SendNodeInfos() {
+func (n *Node) SendByteSlice(data []byte, hostname, port, endpoint string) (string, error) {
+	return GetResponseBody(
+		http.Post(
+			fmt.Sprintf("http://%s:%s%s", hostname, port, endpoint),
+			"application/json",
+			bytes.NewBuffer(data),
+		),
+	)
 }
 
-/*
- */
+func (n *Node) TrySendByteSlice(data []byte, hostname, port, endpoint string) {
+	log.Println("Sending to", hostname, port, endpoint)
+	reply, err := n.SendByteSlice(data, hostname, port, endpoint)
+	if err != nil {
+		log.Println("Error sending to", hostname, port, endpoint, err)
+		return
+	}
+	log.Println("Reply:", reply)
+}
+
+func (n *Node) TryBroadcastByteSlice(data []byte, endpoint string) {
+	log.Println("Broadcasting to", endpoint)
+	for _, node := range n.Ring {
+		if node.Id == n.Id {
+			continue
+		}
+		go n.TrySendByteSlice(data, node.Hostname, node.Port, endpoint)
+	}
+}
