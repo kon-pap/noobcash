@@ -33,6 +33,7 @@ type Node struct {
 
 	// Only used by bootstrap
 	BsNextNodeId *MuInt
+	nodecnt      int
 }
 
 func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
@@ -55,19 +56,21 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 	return newNode
 }
 
-func (n *Node) MakeBootstrap() {
+func (n *Node) MakeBootstrap(nodecnt int) {
 	log.Println("Becoming bootstrap...")
 	n.Id = 0
 	n.Ring[bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)].Id = 0
 	n.BsNextNodeId = &MuInt{
 		Value: 1,
 	}
+	n.nodecnt = nodecnt
 }
 
 // Listens for incoming or mined blocks
 //
 // Should be called as a goroutine
 func (n *Node) SelectMinedOrIncomingBlock() {
+	log.Println("Setting up block handler...")
 	for {
 		select {
 		case minedBlock := <-n.MinedBlockChan:
@@ -282,9 +285,7 @@ func (n *Node) BroadcastRingInfo() error {
 */
 
 func (n *Node) Start() error {
-	// Start API server
-	go n.ServeApiForCli(n.apiport)
-	go n.ServeApiForNodes(n.info.Port)
+	go n.SelectMinedOrIncomingBlock()
 
 	if !n.IsBootstrap() {
 		log.Println("Connecting to bootstrap...")
@@ -293,11 +294,21 @@ func (n *Node) Start() error {
 			return fmt.Errorf("expected an integer as id, got '%s'", err)
 		}
 		log.Println("Assigned id", n.Id)
+	} else {
+		// TODO(ORF): Make it so the block is not direectly applied
+		// TODO(ORF): but rather goes through the proper block path
+		genBlock := bck.CreateGenesisBlock(n.nodecnt, &n.Wallet.PrivKey.PublicKey)
+		if genBlock == nil {
+			return fmt.Errorf("genesis block creation failed")
+		}
+		if err := n.ApplyBlock(genBlock); err != nil {
+			return err
+		}
 	}
 
-	// comment out go keyword to not exit early
-	/*go*/
-	n.SelectMinedOrIncomingBlock()
+	//TODO(ORF): use a wait-group to properly wait for the goroutines to exit
+	go n.ServeApiForCli(n.apiport)
+	n.ServeApiForNodes(n.info.Port)
 
 	return nil
 }
