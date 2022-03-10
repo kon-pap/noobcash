@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -30,18 +28,6 @@ func getAddress(cmd *cobra.Command) (ip string, port int, err error) {
 		return
 	}
 	return
-}
-
-func getResponseBody(resp *http.Response, err error) (string, error) {
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
 }
 
 func Execute() {

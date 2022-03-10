@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/kon-pap/noobcash/pkg/node"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +28,7 @@ var submitCmd = &cobra.Command{
 			return err
 		}
 		transactionJson := bytes.NewBuffer([]byte(`{"recipient":"` + recipient + `","amount":` + args[1] + `}`))
-		body, err := getResponseBody(
+		body, err := node.GetResponseBody(
 			http.Post(fmt.Sprintf("http://%s:%d/submit", ip, port), "application/json", transactionJson),
 		)
 		if err != nil {

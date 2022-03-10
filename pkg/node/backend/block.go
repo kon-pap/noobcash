@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 )
 
 // Defines the capacity of transactions inside a block
-const blockCapacity int = 10
+var BlockCapacity int = 10 // some basic defaults set t fallback on
+var Difficulty int = 1
 
 type Block struct {
 	Index        int
@@ -80,12 +82,20 @@ func (b *Block) AddTx(tx *Transaction) error {
 	return nil
 }
 
+func (b *Block) AddManyTxs(txs []*Transaction) error {
+	if len(b.Transactions)+len(txs) > BlockCapacity {
+		return fmt.Errorf("Block can only fit %d more transactions", BlockCapacity-len(b.Transactions))
+	}
+	b.Transactions = append(b.Transactions, txs...)
+	return nil
+}
+
 func (b *Block) UpdateNonce(nonce string) {
 	b.Nonce = nonce
 }
 
 func (b *Block) IsFull() bool {
-	return blockCapacity == len(b.Transactions)
+	return BlockCapacity == len(b.Transactions)
 }
 
 // This type will be used to create the currentHash of the block
@@ -118,10 +128,13 @@ func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
 	b := &Block{
 		Index:        0,
 		Timestamp:    time.Now(),
-		Nonce:        "0",
+		Nonce:        "00",
 		PreviousHash: []byte("1"),
 	}
-	b.AddTx(initTx)
+	if err := b.AddTx(initTx); err != nil {
+		log.Println(err)
+		return nil
+	}
 	b.ComputeAndFillHash()
 	return b
 }

@@ -19,9 +19,9 @@ type Wallet struct {
 	Utxos   map[string]*TxOut
 }
 type WalletInfo struct {
-	Balance int               `json:"balance"`
-	PubKey  string            `json:"address"`
-	Utxos   map[string]*TxOut `json:"utxos"`
+	Balance int
+	PubKey  *rsa.PublicKey
+	Utxos   map[string]*TxOut
 }
 
 func NewWallet(bits int) *Wallet {
@@ -36,10 +36,17 @@ func NewWallet(bits int) *Wallet {
 	}
 }
 
+func NewWalletInfo(pubKey *rsa.PublicKey) *WalletInfo {
+	return &WalletInfo{
+		PubKey: pubKey,
+		Utxos:  map[string]*TxOut{},
+	}
+}
+
 func (w *Wallet) GetWalletInfo() *WalletInfo {
 	return &WalletInfo{
 		Balance: w.Balance,
-		PubKey:  PubKeyToPem(&w.PrivKey.PublicKey),
+		PubKey:  &w.PrivKey.PublicKey,
 		Utxos:   w.Utxos,
 	}
 }
@@ -57,7 +64,7 @@ func (w *WalletInfo) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(printableWallet{
 		Balance: w.Balance,
-		PubKey:  w.PubKey,
+		PubKey:  PubKeyToPem(w.PubKey),
 		Utxos:   txouts,
 	})
 }
@@ -214,8 +221,11 @@ func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxO
 }
 
 func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, error) {
+	if amount <= 0 {
+		return nil, fmt.Errorf("tried to create transaction for %d", amount)
+	}
 	if amount > w.Balance {
-		return nil, fmt.Errorf("tried to send %d but only have %d", amount, w.Balance)
+		return nil, fmt.Errorf("tried to create transaction for %d but only have %d", amount, w.Balance)
 	}
 	tx := NewTransaction(&w.PrivKey.PublicKey, address, amount)
 	// TODO: coin selection to find utxos to use as TxIns

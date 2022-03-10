@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/kon-pap/noobcash/pkg/node"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +17,7 @@ var viewCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		body, err := getResponseBody(
+		body, err := node.GetResponseBody(
 			http.DefaultClient.Get(fmt.Sprintf("http://%s:%d/view", ip, port)),
 		)
 		if err != nil {

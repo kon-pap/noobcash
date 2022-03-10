@@ -3,6 +3,7 @@ package node
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/kon-pap/noobcash/pkg/node"
 	"github.com/kon-pap/noobcash/pkg/node/backend"
@@ -15,19 +16,30 @@ var rootCmd = &cobra.Command{
 	Long: `Noobcash is a peer-to-peer blockchain network supporting basic payments.
 Class project for the course "Distributed Systems" at the National Technical University of Athens`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		isBootstrap, _ := cmd.Flags().GetBool("bootstrap")
-		port, _ := cmd.Flags().GetString("port")
-		nodecnt, _ := cmd.Flags().GetInt("nodecnt")
-		// wallet := backend.NewWallet(1024)
-		newNode := node.NewNode(0, 1024)
-		if isBootstrap {
-			genBlock := backend.CreateGenesisBlock(nodecnt, &newNode.Wallet.PrivKey.PublicKey)
-			fmt.Println(genBlock)
+		newNode := setupNode(cmd)
+		// fmt.Println(newNode)
+		if err := newNode.Start(); err != nil {
+			return err
 		}
-		fmt.Println("Starting http api server on port", port)
-		node.ServeApi(port)
 		return nil
 	},
+}
+
+func getNodeApiHostDetails(cmd *cobra.Command) (string, string) {
+	hostname, _ := cmd.Flags().GetString("hostname")
+	x := strings.Split(hostname, ":")
+	return x[0], x[1]
+}
+
+// Get cli flags create and set up a new node
+func setupNode(cmd *cobra.Command) *node.Node {
+	ip, nodeport := getNodeApiHostDetails(cmd)
+	apiport, _ := cmd.Flags().GetString("apiport")
+	newNode := node.NewNode(0, 1024, ip, nodeport, apiport)
+	node.BootstrapHostname, _ = cmd.Flags().GetString("bootstrap")
+	backend.BlockCapacity, _ = cmd.Flags().GetInt("capacity")
+	backend.Difficulty, _ = cmd.Flags().GetInt("difficulty")
+	return newNode
 }
 
 func Execute() {
@@ -39,7 +51,9 @@ func Execute() {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.PersistentFlags().BoolP("bootstrap", "b", false, "Controls whether current node is bootstrap node or not")
-	rootCmd.PersistentFlags().StringP("port", "p", "9090", "Port to serve http api on")
-	rootCmd.PersistentFlags().IntP("nodecnt", "c", 5, "Number of nodes to bootstrap for")
+	rootCmd.PersistentFlags().StringP("apiport", "p", "9090", "Port to serve http api on")
+	rootCmd.PersistentFlags().StringP("hostname", "n", "localhost:7070", "IP on which this node's node-api is available")
+	rootCmd.PersistentFlags().StringP("bootstrap", "b", "localhost:7070", "Hostname of the bootstrap node")
+	rootCmd.PersistentFlags().IntP("capacity", "c", 10, "Transaction capacity of a block")
+	rootCmd.PersistentFlags().IntP("difficulty", "d", 1, "Difficulty of mining a block")
 }
