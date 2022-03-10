@@ -16,6 +16,7 @@ type MuInt struct {
 }
 
 type TxQueue struct {
+	Mu    sync.Mutex
 	queue *list.List
 }
 

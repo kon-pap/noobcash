@@ -118,11 +118,17 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
+
+	n.PendingTxs.Mu.Lock()
+	defer n.PendingTxs.Mu.Unlock()
+
 	n.PendingTxs.Enqueue(tx)
 	if n.PendingTxs.Len() >= bck.BlockCapacity {
 		newBlock := bck.NewBlock(n.CurrBlockId, n.getLastBlock().CurrentHash)
 		txs := n.PendingTxs.DequeueMany(bck.BlockCapacity)
-		newBlock.AddManyTxs(txs) // error handling not needed here
+		//!NOTE: Lock may be necessary in block,
+		//! it's safe for now, blocked by PendingTxs.Mu
+		newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
 		go n.MineBlock(newBlock)
 	}
 	return nil
