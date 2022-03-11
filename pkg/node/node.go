@@ -103,21 +103,22 @@ func (n *Node) IsValidTx(tx *bck.Transaction) bool {
 	}()
 }
 func (n *Node) AcceptTx(tx *bck.Transaction) error {
-	//! NOTE: MineBlock will fill the block's hash at the end
-	//! Assumption: MineBlock will increment the node.CurrBlockId
+	//!NOTE: MineBlock will fill the block's hash at the end
+	//!Assumption: MineBlock will increment the node.CurrBlockId
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
 
+	//!NOTE: This lock protects CurrBlockId and Block.AddManyTxs
+	//! If these are used elsewhere care must me taken
 	n.PendingTxs.Mu.Lock()
 	defer n.PendingTxs.Mu.Unlock()
 
 	n.PendingTxs.Enqueue(tx)
 	if n.PendingTxs.Len() >= bck.BlockCapacity {
 		newBlock := bck.NewBlock(n.CurrBlockId, n.getLastBlock().CurrentHash)
+		n.CurrBlockId++
 		txs := n.PendingTxs.DequeueMany(bck.BlockCapacity)
-		//!NOTE: Lock may be necessary in block,
-		//! it's safe for now, blocked by PendingTxs.Mu
 		newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
 		go n.MineBlock(newBlock)
 	}
@@ -126,6 +127,7 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 
 //TODO: Ensure thread-safety
 //! note: extra effort was made to facilitate support for multiple receivers per transaction
+//! note: checking if enough txs exist, could be done by a goroutine every some time
 func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
@@ -218,6 +220,8 @@ func (n *Node) MineBlock(block *bck.Block) {
 	n.MinedBlockChan <- block
 }
 
+//TODO(ORF): This should extend the n.Chain appropriately
+//TODO(ORF): This should check for conflicts and try to handle them
 func (n *Node) ApplyBlock(block *bck.Block) error {
 	if !n.IsValidBlock(block) {
 		return fmt.Errorf("block is not valid")
@@ -334,7 +338,7 @@ func (n *Node) Start() error {
 		if genBlock == nil {
 			return fmt.Errorf("genesis block creation failed")
 		}
-		n.MineBlock(genBlock)
+		go n.MineBlock(genBlock)
 	}
 
 	jg.Add(n.SelectMinedOrIncomingBlock)

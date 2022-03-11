@@ -10,9 +10,6 @@ import (
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
-// Enum of types of messages
-const ()
-
 type NodeInfo struct {
 	// channels for comms
 	Id       int
@@ -31,7 +28,7 @@ func NewNodeInfo(id int, hostname, port string, pubKey *rsa.PublicKey) *NodeInfo
 	return newNodeInfo
 }
 
-func (n *Node) SendByteSlice(data []byte, hostname, port, endpoint string) (string, error) {
+func (n *Node) SendByteSlice(data []byte, hostname, port string, endpoint endpointTy) (string, error) {
 	return GetResponseBody(
 		http.Post(
 			fmt.Sprintf("http://%s:%s%s", hostname, port, endpoint),
@@ -41,7 +38,7 @@ func (n *Node) SendByteSlice(data []byte, hostname, port, endpoint string) (stri
 	)
 }
 
-func (n *Node) TrySendByteSlice(data []byte, hostname, port, endpoint string) {
+func (n *Node) TrySendByteSlice(data []byte, hostname, port string, endpoint endpointTy) {
 	log.Println("Sending to", hostname, port, endpoint)
 	reply, err := n.SendByteSlice(data, hostname, port, endpoint)
 	if err != nil {
@@ -51,7 +48,7 @@ func (n *Node) TrySendByteSlice(data []byte, hostname, port, endpoint string) {
 	log.Println("Reply:", reply)
 }
 
-func (n *Node) TryBroadcastByteSlice(data []byte, endpoint string) {
+func (n *Node) TryBroadcastByteSlice(data []byte, endpoint endpointTy) {
 	log.Println("Broadcasting to", endpoint)
 	for _, node := range n.Ring {
 		if node.Id == n.Id {
