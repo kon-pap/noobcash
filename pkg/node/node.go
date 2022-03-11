@@ -190,10 +190,11 @@ func (n *Node) IsValidBlock(block *bck.Block) bool {
 	//check if Hash(nonce + Hash(block)) starts with n zeros
 	//same process as mining
 	dif := strings.Repeat("0", bck.Difficulty)
-	rand.Seed(time.Now().UnixNano())
+	nonce := []byte(block.Nonce)
+
 	h := sha256.New()
 	h.Write(block.CurrentHash)
-	h.Write([]byte(block.Nonce))
+	h.Write(nonce)
 	lastBlockHash := n.getLastBlock().CurrentHash
 	return string(block.CurrentHash) == string(lastBlockHash) && bck.HexEncodeByteSlice(h.Sum(nil))[:bck.Difficulty] == dif
 }
@@ -206,12 +207,13 @@ func (n *Node) MineBlock(block *bck.Block) {
 	//Hash(nonce + Hash(bck)) starts with n zeros
 	//The only way is guess nonce and check if it's ok
 
+	log.Println("Mining block", block.Index)
 	dif := strings.Repeat("0", bck.Difficulty)
 
 	rand.Seed(time.Now().UnixNano())
-	h := sha256.New()
-	h.Write(block.CurrentHash)
 	for {
+		h := sha256.New()
+		h.Write(block.CurrentHash)
 		nonce := make([]byte, 32)
 		rand.Read(nonce[:])
 		h.Write(nonce[:])
@@ -219,9 +221,6 @@ func (n *Node) MineBlock(block *bck.Block) {
 			block.Nonce = string(nonce)
 			break
 		}
-		h := sha256.New()
-		h.Write(block.CurrentHash)
-
 	}
 
 	n.MinedBlockChan <- block
