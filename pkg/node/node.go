@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,17 +16,21 @@ import (
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
+const checkTxCountIntervalMilliSeconds = 5
+
 var BootstrapHostname string
 
 type Node struct {
-	Id             int
-	Chain          []*bck.Block
-	CurrBlockId    int
-	Wallet         *bck.Wallet
-	IncBlockChan   chan *bck.Block
-	MinedBlockChan chan *bck.Block
-	Ring           map[string]*NodeInfo
-	PendingTxs     *TxQueue
+	Id          int
+	Chain       []*bck.Block
+	CurrBlockId int
+	Wallet      *bck.Wallet
+	Ring        map[string]*NodeInfo
+
+	pendingTxs     *TxQueue
+	incBlockChan   chan *bck.Block // send over the block received from the network
+	minedBlockChan chan *bck.Block // send over the block mined by this node
+	stopMiningChan chan *bck.Block // send over the block received to stop mining and handle leftover transactions
 
 	info    *NodeInfo
 	apiport string
@@ -41,15 +44,19 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 	w := bck.NewWallet(bits)
 	newNodeInfo := NewNodeInfo(-1, ip, port, &w.PrivKey.PublicKey)
 	newNode := &Node{
-		Id:             -1,
-		Chain:          []*bck.Block{},
-		CurrBlockId:    currBlockId,
-		Wallet:         w,
-		IncBlockChan:   make(chan *bck.Block),
-		MinedBlockChan: make(chan *bck.Block),
-		PendingTxs:     NewTxQueue(),
-		info:           newNodeInfo,
-		apiport:        apiport,
+		Id:          -1,
+		Chain:       []*bck.Block{},
+		CurrBlockId: currBlockId,
+		Wallet:      w,
+
+		pendingTxs:     NewTxQueue(),
+		incBlockChan:   make(chan *bck.Block),
+		minedBlockChan: make(chan *bck.Block),
+		stopMiningChan: make(chan *bck.Block, 1),
+
+		info:    newNodeInfo,
+		apiport: apiport,
+
 		Ring: map[string]*NodeInfo{
 			bck.PubKeyToPem(&w.PrivKey.PublicKey): newNodeInfo,
 		},
@@ -99,26 +106,10 @@ func (n *Node) IsValidTx(tx *bck.Transaction) bool {
 	}()
 }
 func (n *Node) AcceptTx(tx *bck.Transaction) error {
-	//!NOTE: MineBlock will fill the block's hash at the end
-	//!Assumption: MineBlock will increment the node.CurrBlockId
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
-
-	//!NOTE: This lock protects CurrBlockId and Block.AddManyTxs
-	//! If these are used elsewhere care must me taken
-	n.PendingTxs.Mu.Lock()
-	defer n.PendingTxs.Mu.Unlock()
-
-	n.PendingTxs.Enqueue(tx)
-	if n.PendingTxs.Len() >= bck.BlockCapacity {
-		newBlock := bck.NewBlock(n.CurrBlockId, n.getLastBlock().CurrentHash)
-		n.CurrBlockId++
-		txs := n.PendingTxs.DequeueMany(bck.BlockCapacity)
-		newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
-		//TODO(ORF): fix this
-		go n.MineBlock(newBlock)
-	}
+	n.pendingTxs.Enqueue(tx)
 	return nil
 }
 
@@ -179,48 +170,50 @@ func (n *Node) IsValidBlock(block *bck.Block) bool {
 	if n.CurrBlockId == 0 && block.Index == 0 {
 		return true
 	}
-	//check if Hash(nonce + Hash(block)) starts with n zeros
-	//same process as mining
 	dif := strings.Repeat("0", bck.Difficulty)
-	nonce := []byte(block.Nonce)
+	lastBlockHash := bck.HexEncodeByteSlice(n.getLastBlock().CurrentHash)
+	thisBlockHash := bck.HexEncodeByteSlice(block.CurrentHash)
+	thisBlockPreviousHash := bck.HexEncodeByteSlice(block.PreviousHash)
 
-	h := sha256.New()
-	h.Write(block.CurrentHash)
-	h.Write(nonce)
-	lastBlockHash := n.getLastBlock().CurrentHash
-	return string(block.CurrentHash) == string(lastBlockHash) && bck.HexEncodeByteSlice(h.Sum(nil))[:bck.Difficulty] == dif
+	return lastBlockHash == thisBlockPreviousHash && // this block's previous block is our current last block
+		strings.HasPrefix(thisBlockHash, dif) && // this block's hash starts with the required number of zeros
+		bck.HexEncodeByteSlice(block.ComputeHash()) == thisBlockHash // this block's hash is correct
 }
 
-// check block validity
+func (n *Node) HandleStopMining(incomingBlock, almostMinedBlock *bck.Block) {
+	//TODO(ORF): Compare incomingBlock's and almostMinedBlock's transactions, and
+	//TODO(ORF): and call enqueueMany for any that were not in incomingBlock
+}
+
 func (n *Node) MineBlock(block *bck.Block) {
-
-	// Mined block is sent to be processed
-	//find a number which if we hash with block's hash will start with n 0
-	//Hash(nonce + Hash(bck)) starts with n zeros
-	//The only way is guess nonce and check if it's ok
-
-	//TODO(ORF): CHANGE this to insert the nonce in the block and hash it again
+	//*DONE(ORF): CHANGE this to insert the nonce in the block and hash it again
 	log.Println("Mining block", block.Index)
 	dif := strings.Repeat("0", bck.Difficulty)
 
 	rand.Seed(time.Now().UnixNano())
+	nonce := make([]byte, 32)
+
 	for {
-		// TODO(ORF): Stop mining if a block is received
-		h := sha256.New()
-		h.Write(block.CurrentHash)
-		nonce := make([]byte, 32)
+		//*DONE(ORF): Stop mining if a block is received
+		select {
+		case incomingBlock := <-n.stopMiningChan:
+			log.Println("Stopping mining...")
+			n.HandleStopMining(incomingBlock, block)
+			return
+		default: // used to prevent blocking
+		}
 		rand.Read(nonce[:])
-		h.Write(nonce[:])
-		if bck.HexEncodeByteSlice(h.Sum(nil))[:bck.Difficulty] == dif {
-			block.Nonce = string(nonce)
+		block.Nonce = bck.HexEncodeByteSlice(nonce)
+		block.ComputeAndFillHash()
+		if strings.HasPrefix(bck.HexEncodeByteSlice(block.CurrentHash), dif) {
 			break
 		}
 	}
-
-	n.MinedBlockChan <- block
+	n.minedBlockChan <- block
 }
 
 //TODO(ORF): This should extend the n.Chain appropriately
+//TODO(ORF): And update n.CurrBlockId
 func (n *Node) ApplyBlock(block *bck.Block) error {
 	if !n.IsValidBlock(block) {
 		return fmt.Errorf("block is not valid")
@@ -290,6 +283,18 @@ func (n *Node) ConnectToBootstrap() error {
 	return nil
 }
 
+func (n *Node) CheckTxQueueForMining() {
+	// return ticker if we need to stop the job sometime (make this into a jobfactory)
+	ticker := time.NewTicker(time.Millisecond * checkTxCountIntervalMilliSeconds)
+	for range ticker.C {
+		if txs := n.pendingTxs.DequeueMany(bck.BlockCapacity); txs != nil {
+			newBlock := bck.NewBlock(n.CurrBlockId, n.getLastBlock().CurrentHash)
+			newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
+			go n.MineBlock(newBlock)
+		}
+	}
+}
+
 // Listens for incoming or mined blocks
 //
 // Should be called as a goroutine
@@ -297,11 +302,11 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 	log.Println("Setting up block handler...")
 	for {
 		select {
-		case minedBlock := <-n.MinedBlockChan:
+		case minedBlock := <-n.minedBlockChan:
 			//TODO: handle minedBlock
 			log.Println("Processing mined block...")
 			n.ApplyBlock(minedBlock)
-		case incomingBlock := <-n.IncBlockChan:
+		case incomingBlock := <-n.incBlockChan:
 			//TODO: handle incomingBlock
 			log.Println("Processing received block...")
 			fmt.Println("Incoming block:", incomingBlock)
@@ -341,10 +346,11 @@ func (n *Node) Start() error {
 		go n.MineBlock(genBlock)
 	}
 
-	jg.Add(n.SelectMinedOrIncomingBlock)
 	jg.Add(func() { n.ServeApiForCli(n.apiport) })
 	jg.Add(func() { n.ServeApiForNodes(n.info.Port) })
-	//TODO(ORF): Add a job to check for enough txs for a new block
+	jg.Add(n.SelectMinedOrIncomingBlock)
+	//*DONE(ORF): Add a job to check for enough txs for a new block
+	jg.Add(n.CheckTxQueueForMining)
 
 	jg.RunAndWait()
 
