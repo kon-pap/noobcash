@@ -48,7 +48,7 @@ func TestAcceptNodesHandler(t *testing.T) {
 func TestSubmitBlocksHandler(t *testing.T) {
 	t.Run("Send a single block", func(t *testing.T) {
 		jsBlock, err := json.Marshal([]*backend.Block{
-			backend.NewBlock(1, []byte("test")),
+			backend.NewBlock([]byte("test")),
 		})
 		if err != nil {
 			log.Fatalln(err)

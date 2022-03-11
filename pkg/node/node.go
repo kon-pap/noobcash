@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
@@ -21,16 +22,18 @@ const checkTxCountIntervalMilliSeconds = 5
 var BootstrapHostname string
 
 type Node struct {
-	Id          int
-	Chain       []*bck.Block
-	CurrBlockId int
-	Wallet      *bck.Wallet
-	Ring        map[string]*NodeInfo
+	Id     int
+	Chain  []*bck.Block
+	Wallet *bck.Wallet
+	Ring   map[string]*NodeInfo
 
 	pendingTxs     *TxQueue
 	incBlockChan   chan *bck.Block // send over the block received from the network
 	minedBlockChan chan *bck.Block // send over the block mined by this node
 	stopMiningChan chan *bck.Block // send over the block received to stop mining and handle leftover transactions
+
+	muChainLock sync.Mutex // locks when altering the chain
+	muRingLock  sync.Mutex // locks to grab the specific nodeInfo locks without risking deadlocks
 
 	info    *NodeInfo
 	apiport string
@@ -44,14 +47,13 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 	w := bck.NewWallet(bits)
 	newNodeInfo := NewNodeInfo(-1, ip, port, &w.PrivKey.PublicKey)
 	newNode := &Node{
-		Id:          -1,
-		Chain:       []*bck.Block{},
-		CurrBlockId: currBlockId,
-		Wallet:      w,
+		Id:     -1,
+		Chain:  []*bck.Block{},
+		Wallet: w,
 
 		pendingTxs:     NewTxQueue(),
-		incBlockChan:   make(chan *bck.Block),
-		minedBlockChan: make(chan *bck.Block),
+		incBlockChan:   make(chan *bck.Block, 1),
+		minedBlockChan: make(chan *bck.Block, 1),
 		stopMiningChan: make(chan *bck.Block, 1),
 
 		info:    newNodeInfo,
@@ -113,25 +115,31 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 	return nil
 }
 
-//TODO(ORF): Ensure thread-safety
-//! note: extra effort was made to facilitate support for multiple receivers per transaction
-//! note: checking if enough txs exist, could be done by a goroutine every some time
 func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
-	stringNodeAddress := bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)
+	var nodeAddress string = bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)
+	var senderAddress string
+	var senderWalletInfo *bck.WalletInfo
+
+	//*DONE(ORF): Ensure thread-safety
+	//!NOTE(ORF): Could be useless to lock here, since chain lock will most likely always block this beforehand
+	n.muRingLock.Lock()
+	UnlockTxParticipants := n.LockTxParticipants(tx)
+	defer UnlockTxParticipants()
+	n.muRingLock.Unlock()
 
 	// Skip this if tx is the genesis transaction
 	if tx.SenderAddress != nil {
-		stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
-		senderWallet := n.Ring[stringSenderAddress].WInfo
-		thisIsSender := stringSenderAddress == stringNodeAddress
+		senderAddress = bck.PubKeyToPem(tx.SenderAddress)
+		senderWalletInfo = n.Ring[senderAddress].WInfo
+		thisIsSender := senderAddress == nodeAddress
 
 		for txInId := range tx.Inputs {
-			previousUtxo := senderWallet.Utxos[string(txInId)]
-			senderWallet.Balance -= previousUtxo.Amount
-			delete(senderWallet.Utxos, string(txInId))
+			previousUtxo := senderWalletInfo.Utxos[string(txInId)]
+			senderWalletInfo.Balance -= previousUtxo.Amount
+			delete(senderWalletInfo.Utxos, string(txInId))
 
 			// if this wallet is the sender then update the private state as well
 			if thisIsSender {
@@ -142,13 +150,13 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	}
 
 	for _, txOut := range tx.Outputs {
-		stringReceiverAddress := bck.PubKeyToPem(txOut.Owner)
-		receiverWallet := n.Ring[stringReceiverAddress].WInfo
+		receiverAddress := bck.PubKeyToPem(txOut.Owner)
+		receiverWalletInfo := n.Ring[receiverAddress].WInfo
 
-		receiverWallet.Balance += txOut.Amount // increase receiver's balance
-		receiverWallet.Utxos[txOut.Id] = txOut // add new txOut to receiver's utxos
+		receiverWalletInfo.Balance += txOut.Amount // increase receiver's balance
+		receiverWalletInfo.Utxos[txOut.Id] = txOut // add new txOut to receiver's utxos
 		// if this wallet is the receiver then update the private state as well
-		if stringReceiverAddress == stringNodeAddress {
+		if receiverAddress == nodeAddress {
 			n.Wallet.Balance += txOut.Amount
 			n.Wallet.Utxos[txOut.Id] = txOut
 		}
@@ -156,6 +164,28 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 
 	return nil
 
+}
+
+func (n *Node) LockTxParticipants(tx *bck.Transaction) func() {
+	myLockedPubKeys := make(stringSet)
+	if tx.SenderAddress != nil {
+		senderAddress := bck.PubKeyToPem(tx.SenderAddress)
+		n.Ring[senderAddress].Mu.Lock()
+		myLockedPubKeys.Add(senderAddress)
+	}
+	for _, txOut := range tx.Outputs {
+		receiverAddress := bck.PubKeyToPem(txOut.Owner)
+		if myLockedPubKeys.Contains(receiverAddress) {
+			continue
+		}
+		n.Ring[receiverAddress].Mu.Lock()
+		myLockedPubKeys.Add(receiverAddress)
+	}
+	return func() {
+		for pubKey := range myLockedPubKeys {
+			n.Ring[pubKey].Mu.Unlock()
+		}
+	}
 }
 
 /*
@@ -167,7 +197,7 @@ func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 //* BLOCK
 func (n *Node) IsValidBlock(block *bck.Block) bool {
 	// GenesisBlock is valid
-	if n.CurrBlockId == 0 && block.Index == 0 {
+	if string(block.PreviousHash) == "1" {
 		return true
 	}
 	dif := strings.Repeat("0", bck.Difficulty)
@@ -212,18 +242,24 @@ func (n *Node) MineBlock(block *bck.Block) {
 	n.minedBlockChan <- block
 }
 
-//TODO(ORF): This should extend the n.Chain appropriately
-//TODO(ORF): And update n.CurrBlockId
+//*DONE(ORF): This should extend the n.Chain appropriately
 func (n *Node) ApplyBlock(block *bck.Block) error {
+	log.Println("Applying new block with", len(block.Transactions), "transactions")
+
+	n.muChainLock.Lock()
+	defer n.muChainLock.Unlock()
+
 	if !n.IsValidBlock(block) {
 		return fmt.Errorf("block is not valid")
 	}
-	log.Println("Applying new block with", len(block.Transactions), "transactions")
 	for _, tx := range block.Transactions {
 		if err := n.ApplyTx(tx); err != nil {
 			return err
 		}
 	}
+	n.Chain = append(n.Chain, block)
+	block.Index = len(n.Chain) // len will already be inceremented by 1
+
 	log.Println("Block successfully applied")
 	return nil
 }
@@ -288,7 +324,7 @@ func (n *Node) CheckTxQueueForMining() {
 	ticker := time.NewTicker(time.Millisecond * checkTxCountIntervalMilliSeconds)
 	for range ticker.C {
 		if txs := n.pendingTxs.DequeueMany(bck.BlockCapacity); txs != nil {
-			newBlock := bck.NewBlock(n.CurrBlockId, n.getLastBlock().CurrentHash)
+			newBlock := bck.NewBlock(n.getLastBlock().CurrentHash)
 			newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
 			go n.MineBlock(newBlock)
 		}

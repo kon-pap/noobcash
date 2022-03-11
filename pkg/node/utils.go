@@ -131,3 +131,13 @@ func (jg *JobGroup) RunAndWait() {
 	}
 	jg.wg.Wait()
 }
+
+type stringSet map[string]struct{}
+
+func (ss stringSet) Add(s string) {
+	ss[s] = struct{}{}
+}
+func (ss stringSet) Contains(s string) bool {
+	_, ok := ss[s]
+	return ok
+}

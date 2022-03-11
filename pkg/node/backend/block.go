@@ -24,9 +24,9 @@ type Block struct {
 	PreviousHash []byte
 }
 
-func NewBlock(index int, prevHash []byte) *Block {
+func NewBlock(prevHash []byte) *Block {
 	return &Block{
-		Index:        index,
+		// Index:        index,
 		Timestamp:    time.Now(),
 		PreviousHash: prevHash,
 	}
