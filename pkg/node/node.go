@@ -48,8 +48,8 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 		Chain:          []*bck.Block{},
 		CurrBlockId:    currBlockId,
 		Wallet:         w,
-		IncBlockChan:   make(chan *bck.Block, 1),
-		MinedBlockChan: make(chan *bck.Block, 1),
+		IncBlockChan:   make(chan *bck.Block),
+		MinedBlockChan: make(chan *bck.Block),
 		PendingTxs:     NewTxQueue(),
 		info:           newNodeInfo,
 		apiport:        apiport,
@@ -77,7 +77,6 @@ func (n *Node) IsBootstrap() bool {
 //* TRANSACTION
 func (n *Node) IsValidSig(tx *bck.Transaction) bool {
 	// Genesis transaction is valid
-	// log.Fatalln(bck.HexDecodeByteSlice())
 	if tx.SenderAddress == nil {
 		return true
 	}
@@ -201,11 +200,13 @@ func (n *Node) MineBlock(block *bck.Block) {
 	//Hash(nonce + Hash(bck)) starts with n zeros
 	//The only way is guess nonce and check if it's ok
 
+	//TODO: CHANGE this to insert the nonce in the block and hash it again
 	log.Println("Mining block", block.Index)
 	dif := strings.Repeat("0", bck.Difficulty)
 
 	rand.Seed(time.Now().UnixNano())
 	for {
+		// TODO: Stop mining if a block is received
 		h := sha256.New()
 		h.Write(block.CurrentHash)
 		nonce := make([]byte, 32)
@@ -260,6 +261,7 @@ func (n *Node) IsValidChain() bool {
 */
 
 /*
+//TODO: Throw away transactions that were submitted in the incoming block.
 func (n *Node) ResolveConflict(block *bck.Block) error {
 }
 */
@@ -344,6 +346,7 @@ func (n *Node) Start() error {
 	jg.Add(n.SelectMinedOrIncomingBlock)
 	jg.Add(func() { n.ServeApiForCli(n.apiport) })
 	jg.Add(func() { n.ServeApiForNodes(n.info.Port) })
+	//TODO: Add a job to check for enough txs for a new block
 
 	jg.RunAndWait()
 
