@@ -17,9 +17,6 @@ import (
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
-//TODO: implement logic for filling up blocks not in the Chain slice
-//TODO: implement logic for chain branches
-
 var BootstrapHostname string
 
 type Node struct {
@@ -119,12 +116,13 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 		n.CurrBlockId++
 		txs := n.PendingTxs.DequeueMany(bck.BlockCapacity)
 		newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
+		//TODO(ORF): fix this
 		go n.MineBlock(newBlock)
 	}
 	return nil
 }
 
-//TODO: Ensure thread-safety
+//TODO(ORF): Ensure thread-safety
 //! note: extra effort was made to facilitate support for multiple receivers per transaction
 //! note: checking if enough txs exist, could be done by a goroutine every some time
 func (n *Node) ApplyTx(tx *bck.Transaction) error {
@@ -170,6 +168,7 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 }
 
 /*
+//TODO(BILL)
 func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 }
 */
@@ -200,13 +199,13 @@ func (n *Node) MineBlock(block *bck.Block) {
 	//Hash(nonce + Hash(bck)) starts with n zeros
 	//The only way is guess nonce and check if it's ok
 
-	//TODO: CHANGE this to insert the nonce in the block and hash it again
+	//TODO(ORF): CHANGE this to insert the nonce in the block and hash it again
 	log.Println("Mining block", block.Index)
 	dif := strings.Repeat("0", bck.Difficulty)
 
 	rand.Seed(time.Now().UnixNano())
 	for {
-		// TODO: Stop mining if a block is received
+		// TODO(ORF): Stop mining if a block is received
 		h := sha256.New()
 		h.Write(block.CurrentHash)
 		nonce := make([]byte, 32)
@@ -222,7 +221,6 @@ func (n *Node) MineBlock(block *bck.Block) {
 }
 
 //TODO(ORF): This should extend the n.Chain appropriately
-//TODO(ORF): This should check for conflicts and try to handle them
 func (n *Node) ApplyBlock(block *bck.Block) error {
 	if !n.IsValidBlock(block) {
 		return fmt.Errorf("block is not valid")
@@ -238,10 +236,7 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 }
 
 /*
-// currhash is correct && previous_hash is actually the hash of the previous block
-// recheck transaction validity
-func (n *Node) IsValidBlock(block *bck.Block) bool {
-}
+//TODO(BILL)
 func (n *Node) BroadcastBlock(block *bck.Block) error {
 }
 */
@@ -320,6 +315,7 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 // 3. Wait for info of all other nodes
 
 // Send IP, port, pubkey of all nodes
+//TODO(BILL)
 func (n *Node) BroadcastRingInfo() error {
 }
 */
@@ -335,6 +331,8 @@ func (n *Node) Start() error {
 			return fmt.Errorf("expected an integer as id, got '%s'", err)
 		}
 		log.Println("Assigned id", n.Id)
+		//TODO(PAP): Wait for N nodes, broadcast ring info, wait for N responses,
+		//TODO(PAP): send genesis block and money spreading block
 	} else {
 		genBlock := bck.CreateGenesisBlock(n.nodecnt, &n.Wallet.PrivKey.PublicKey)
 		if genBlock == nil {
@@ -346,7 +344,7 @@ func (n *Node) Start() error {
 	jg.Add(n.SelectMinedOrIncomingBlock)
 	jg.Add(func() { n.ServeApiForCli(n.apiport) })
 	jg.Add(func() { n.ServeApiForNodes(n.info.Port) })
-	//TODO: Add a job to check for enough txs for a new block
+	//TODO(ORF): Add a job to check for enough txs for a new block
 
 	jg.RunAndWait()
 
