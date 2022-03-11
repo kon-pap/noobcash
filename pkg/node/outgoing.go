@@ -38,6 +38,8 @@ func (n *Node) SendByteSlice(data []byte, hostname, port string, endpoint endpoi
 	)
 }
 
+//TODO(PAP): func (n *Node) BroadcastByteSlice(data []byte, endpoint endpointTy) error {}
+
 func (n *Node) TrySendByteSlice(data []byte, hostname, port string, endpoint endpointTy) {
 	log.Println("Sending to", hostname, port, endpoint)
 	reply, err := n.SendByteSlice(data, hostname, port, endpoint)
