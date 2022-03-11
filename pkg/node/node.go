@@ -37,6 +37,7 @@ type Node struct {
 
 	// Only used by bootstrap
 	BsNextNodeId *MuInt
+	nodecnt      int
 }
 
 func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
@@ -59,29 +60,14 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 	return newNode
 }
 
-func (n *Node) MakeBootstrap() {
+func (n *Node) MakeBootstrap(nodecnt int) {
 	log.Println("Becoming bootstrap...")
 	n.Id = 0
 	n.Ring[bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey)].Id = 0
 	n.BsNextNodeId = &MuInt{
 		Value: 1,
 	}
-}
-
-// Listens for incoming or mined blocks
-//
-// Should be called as a goroutine
-func (n *Node) SelectMinedOrIncomingBlock() {
-	for {
-		select {
-		case minedBlock := <-n.MinedBlockChan:
-			//TODO: handle minedBlock
-			fmt.Println("Mined block:", minedBlock)
-		case incomingBlock := <-n.IncBlockChan:
-			//TODO: handle incomingBlock
-			fmt.Println("Incoming block:", incomingBlock)
-		}
-	}
+	n.nodecnt = nodecnt
 }
 
 func (n *Node) IsBootstrap() bool {
@@ -122,11 +108,17 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
 		return fmt.Errorf("transaction is not valid")
 	}
+
+	n.PendingTxs.Mu.Lock()
+	defer n.PendingTxs.Mu.Unlock()
+
 	n.PendingTxs.Enqueue(tx)
 	if n.PendingTxs.Len() >= bck.BlockCapacity {
 		newBlock := bck.NewBlock(n.CurrBlockId, n.getLastBlock().CurrentHash)
 		txs := n.PendingTxs.DequeueMany(bck.BlockCapacity)
-		newBlock.AddManyTxs(txs) // error handling not needed here
+		//!NOTE: Lock may be necessary in block,
+		//! it's safe for now, blocked by PendingTxs.Mu
+		newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
 		go n.MineBlock(newBlock)
 	}
 	return nil
@@ -236,6 +228,7 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 			return err
 		}
 	}
+	log.Println("Block successfully applied")
 	return nil
 }
 
@@ -296,6 +289,25 @@ func (n *Node) ConnectToBootstrap() error {
 	return nil
 }
 
+// Listens for incoming or mined blocks
+//
+// Should be called as a goroutine
+func (n *Node) SelectMinedOrIncomingBlock() {
+	log.Println("Setting up block handler...")
+	for {
+		select {
+		case minedBlock := <-n.MinedBlockChan:
+			//TODO: handle minedBlock
+			log.Println("Processing mined block...")
+			n.ApplyBlock(minedBlock)
+		case incomingBlock := <-n.IncBlockChan:
+			//TODO: handle incomingBlock
+			log.Println("Processing received block...")
+			fmt.Println("Incoming block:", incomingBlock)
+		}
+	}
+}
+
 /*
 // 1. Send Wallet pubkey
 // 2. Receive node id
@@ -307,20 +319,29 @@ func (n *Node) BroadcastRingInfo() error {
 */
 
 func (n *Node) Start() error {
-	// Start API server
-	go n.ServeApiForCli(n.apiport)
-	go n.ServeApiForNodes(n.info.Port)
+
+	var jg JobGroup
 
 	if !n.IsBootstrap() {
+		log.Println("Connecting to bootstrap...")
 		err := n.ConnectToBootstrap()
 		if err != nil {
 			return fmt.Errorf("expected an integer as id, got '%s'", err)
 		}
+		log.Println("Assigned id", n.Id)
+	} else {
+		genBlock := bck.CreateGenesisBlock(n.nodecnt, &n.Wallet.PrivKey.PublicKey)
+		if genBlock == nil {
+			return fmt.Errorf("genesis block creation failed")
+		}
+		n.MineBlock(genBlock)
 	}
 
-	// comment out go keyword to not exit early
-	/*go*/
-	n.SelectMinedOrIncomingBlock()
+	jg.Add(n.SelectMinedOrIncomingBlock)
+	jg.Add(func() { n.ServeApiForCli(n.apiport) })
+	jg.Add(func() { n.ServeApiForNodes(n.info.Port) })
+
+	jg.RunAndWait()
 
 	return nil
 }

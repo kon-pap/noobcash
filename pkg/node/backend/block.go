@@ -12,8 +12,8 @@ import (
 )
 
 // Defines the capacity of transactions inside a block
-var BlockCapacity int
-var Difficulty int
+var BlockCapacity int = 10 // some basic defaults set t fallback on
+var Difficulty int = 1
 
 type Block struct {
 	Index        int

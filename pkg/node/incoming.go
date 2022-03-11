@@ -10,16 +10,23 @@ import (
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
+const (
+	acceptNodesEndpoint   = "/accept-nodes"
+	submitBlocksEndpoint  = "/submit-blocks"
+	submitTxsEndpoint     = "/submit-txs"
+	bootstrapNodeEndpoint = "/bootstrap-node"
+)
+
 func (n *Node) setupNodeHandler() *mux.Router {
 	r := mux.NewRouter()
 	// Accepts a list of fellow nodes in its ring
-	r.HandleFunc("/accept-nodes", n.createAcceptNodesHandler()).Methods("POST")
+	r.HandleFunc(acceptNodesEndpoint, n.createAcceptNodesHandler()).Methods("POST")
 	// Accepts a list of blocks to try and apply to the chain
-	r.HandleFunc("/submit-blocks", n.createSubmitBlocksHandler()).Methods("POST")
+	r.HandleFunc(submitBlocksEndpoint, n.createSubmitBlocksHandler()).Methods("POST")
 	// Accepts a list of transactions to try and insert into blocks
-	r.HandleFunc("/submit-txs", n.createSubmitTxsHandler()).Methods("POST")
+	r.HandleFunc(submitTxsEndpoint, n.createSubmitTxsHandler()).Methods("POST")
 	if n.IsBootstrap() { // only bootstrap node can register new nodes
-		r.HandleFunc("/bootstrap-node", n.createBootstrapNodeHandler()).Methods("POST")
+		r.HandleFunc(bootstrapNodeEndpoint, n.createBootstrapNodeHandler()).Methods("POST")
 	}
 	return r
 }
