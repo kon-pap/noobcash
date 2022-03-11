@@ -23,7 +23,7 @@ var bootstrapCmd = &cobra.Command{
 			return err
 		}
 		// fmt.Println(genBlock)
-
+		newNode.MineBlock(genBlock)
 		newNode.Start()
 		return nil
 	},
