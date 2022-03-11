@@ -17,7 +17,7 @@ var rootCmd = &cobra.Command{
 Class project for the course "Distributed Systems" at the National Technical University of Athens`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		newNode := setupNode(cmd)
-		// fmt.Println(newNode)
+
 		if err := newNode.Start(); err != nil {
 			return err
 		}
@@ -51,6 +51,7 @@ func Execute() {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
 	rootCmd.PersistentFlags().StringP("apiport", "p", "9090", "Port to serve http api on")
 	rootCmd.PersistentFlags().StringP("hostname", "n", "localhost:7070", "IP on which this node's node-api is available")
 	rootCmd.PersistentFlags().StringP("bootstrap", "b", "localhost:7070", "Hostname of the bootstrap node")

@@ -10,23 +10,25 @@ import (
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
+type endpointTy string
+
 const (
-	acceptNodesEndpoint   = "/accept-nodes"
-	submitBlocksEndpoint  = "/submit-blocks"
-	submitTxsEndpoint     = "/submit-txs"
-	bootstrapNodeEndpoint = "/bootstrap-node"
+	acceptNodesEndpoint   = endpointTy("/accept-nodes")
+	submitBlocksEndpoint  = endpointTy("/submit-blocks")
+	submitTxsEndpoint     = endpointTy("/submit-txs")
+	bootstrapNodeEndpoint = endpointTy("/bootstrap-node")
 )
 
 func (n *Node) setupNodeHandler() *mux.Router {
 	r := mux.NewRouter()
 	// Accepts a list of fellow nodes in its ring
-	r.HandleFunc(acceptNodesEndpoint, n.createAcceptNodesHandler()).Methods("POST")
+	r.HandleFunc(string(acceptNodesEndpoint), n.createAcceptNodesHandler()).Methods("POST")
 	// Accepts a list of blocks to try and apply to the chain
-	r.HandleFunc(submitBlocksEndpoint, n.createSubmitBlocksHandler()).Methods("POST")
+	r.HandleFunc(string(submitBlocksEndpoint), n.createSubmitBlocksHandler()).Methods("POST")
 	// Accepts a list of transactions to try and insert into blocks
-	r.HandleFunc(submitTxsEndpoint, n.createSubmitTxsHandler()).Methods("POST")
+	r.HandleFunc(string(submitTxsEndpoint), n.createSubmitTxsHandler()).Methods("POST")
 	if n.IsBootstrap() { // only bootstrap node can register new nodes
-		r.HandleFunc(bootstrapNodeEndpoint, n.createBootstrapNodeHandler()).Methods("POST")
+		r.HandleFunc(string(bootstrapNodeEndpoint), n.createBootstrapNodeHandler()).Methods("POST")
 	}
 	return r
 }

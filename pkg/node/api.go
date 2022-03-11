@@ -67,6 +67,7 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 			return
 		}
 		fmt.Fprintf(w, "Submitting transaction to %s for %d", tx.Recipient, tx.Amount)
+		// TODO: CreateTx, SignTx, AcceptTx
 		// n.SubmitTx(tx.Recipient, tx.Amount)
 	}
 }

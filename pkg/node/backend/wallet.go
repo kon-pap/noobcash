@@ -228,7 +228,7 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 		return nil, fmt.Errorf("tried to create transaction for %d but only have %d", amount, w.Balance)
 	}
 	tx := NewTransaction(&w.PrivKey.PublicKey, address, amount)
-	// TODO: coin selection to find utxos to use as TxIns
+	// TODO: coin selection algorithm to find utxos to use as TxIns
 	sum, previousTxOuts, err := w.selectUTXOsLargestFirst(amount)
 	if err != nil {
 		return nil, err
@@ -237,7 +237,6 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 		tx.Inputs.Add(txOut.Id)
 	}
 
-	// TODO: add TxOut to target address, add TxOut to change address
 	targetTxOut := NewTxOut(address, amount)
 	changeTxOut := NewTxOut(&w.PrivKey.PublicKey, sum-amount)
 	targetTxOut.ComputeAndFillHash()
@@ -257,5 +256,3 @@ func (w *Wallet) SignTx(tx *Transaction) error {
 	tx.Signature = signature
 	return nil
 }
-
-// no need for Balance method, because it is already in the Wallet struct
