@@ -87,7 +87,7 @@ func (n *Node) IsValidSig(tx *bck.Transaction) bool {
 		return true
 	}
 	err := rsa.VerifyPKCS1v15(tx.SenderAddress, crypto.SHA256, tx.Id, tx.Signature)
-	if err == nil {
+	if err != nil {
 		log.Println("Signature validation failed")
 	}
 	return err == nil
@@ -321,7 +321,10 @@ func (n *Node) ConnectToBootstrap() error {
 
 func (n *Node) CheckTxQueueForMining() {
 	// return ticker if we need to stop the job sometime (make this into a jobfactory)
-	ticker := time.NewTicker(time.Millisecond * checkTxCountIntervalMilliSeconds)
+	//TODO(ORF): Rethink interval of polling. Millisecond interval causes starvation
+	//because DequeueMany uses the lock. I set it to time.Second to proceed
+	//If not starvation, some serious race condition is waiting us
+	ticker := time.NewTicker(time.Second * checkTxCountIntervalMilliSeconds)
 	for range ticker.C {
 		if txs := n.pendingTxs.DequeueMany(bck.BlockCapacity); txs != nil {
 			newBlock := bck.NewBlock(n.getLastBlock().CurrentHash)
@@ -396,13 +399,13 @@ func (n *Node) BroadcastRingInfo() error {
 }
 
 func (n *Node) StartSetup() {
-	//TODO(PAP): Wait for N nodes, broadcast ring info, wait for N responses,
-	//TODO(PAP): send genesis block and money spreading block(s)
+	//*DONE(PAP): Wait for N nodes, broadcast ring info, wait for N responses,
+	//*DONE(PAP): send genesis block and money spreading block(s)
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
 	// Wait for N nodes
 	for n.nodecnt != len(n.Ring) {
-		// Sleep for 3 seconds to avoid excessive polling
-		time.Sleep(3 * time.Second)
+		// Sleep for 1 second to avoid excessive polling
+		time.Sleep(time.Second)
 	}
 
 	log.Println("All nodes connected")
@@ -412,28 +415,84 @@ func (n *Node) StartSetup() {
 
 	log.Println("Ring broadcasted successfully")
 	// Wait for genesis block to be mined
-	for n.CurrBlockId == 0 {
-		// Sleep for 3 seconds to avoid excessive polling
-		time.Sleep(3 * time.Second)
+	for len(n.Chain) == 0 {
+		// Sleep for 1 second to avoid excessive polling
+		time.Sleep(time.Second)
 	}
 
+	log.Println("Genesis is in the chain")
+
+	// Setting block capacity to 1
+	//! Works because we don't check block capacity in isValidBlock
+	previousCapacity := bck.BlockCapacity
+	bck.BlockCapacity = 1
+
+	awaitedLen := 2
 	for _, nInfo := range n.Ring {
 		if nInfo.Id != n.Id {
 			tx, err := n.Wallet.CreateTx(100, nInfo.WInfo.PubKey)
 			if err != nil {
-				fmt.Print(err)
+				log.Print(err)
 				return
 			}
+			log.Printf("Created initial tx for node %d", nInfo.Id)
+
+			err = n.Wallet.SignTx(tx)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			log.Printf("Signed initial tx for node %d", nInfo.Id)
 
 			err = n.AcceptTx(tx)
 			if err != nil {
-				fmt.Print(err)
+				log.Print(err)
 				return
 			}
+			log.Printf("Accepted initial tx for node %d", nInfo.Id)
+
+			newBlock := bck.NewBlock(n.getLastBlock().CurrentHash)
+			newBlock.AddTx(tx)
+			n.MineBlock(newBlock)
+
+			// Waiting to mine the block so as to update UTXOs
+			for len(n.Chain) != awaitedLen {
+				// Sleep for 3 seconds to avoid excessive polling
+				time.Sleep(time.Second)
+			}
+			awaitedLen++
 		}
 	}
 
-	log.Println("Created initial transactions")
+	log.Println("Created initial transactions and added to the chain")
+
+	// Resetting block capacity
+	bck.BlockCapacity = previousCapacity
+
+	for _, nInfo := range n.Ring {
+		if nInfo.Id != n.Id {
+			sendContent, err := json.Marshal(n.Chain)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			sendBody := bytes.NewBuffer(sendContent)
+			body, err := GetResponseBody(
+				http.DefaultClient.Post(
+					fmt.Sprintf("http://%s:%s/submit-blocks", nInfo.Hostname, nInfo.Port),
+					"application/json",
+					sendBody,
+				),
+			)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+			log.Println(string(body))
+		}
+	}
+
+	log.Println("Sent chain to nodes. Game on!")
 }
 
 func (n *Node) Start() error {
