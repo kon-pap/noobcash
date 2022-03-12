@@ -309,16 +309,91 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 	}
 }
 
-/*
-// 1. Send Wallet pubkey
-// 2. Receive node id
-// 3. Wait for info of all other nodes
-
-// Send IP, port, pubkey of all nodes
-//TODO(BILL)
 func (n *Node) BroadcastRingInfo() error {
+	var nodes []transferNodeTy
+	for pubKey, nInfo := range n.Ring {
+		nodes = append(nodes, transferNodeTy{
+			Hostname: nInfo.Hostname,
+			Port:     nInfo.Port,
+			PubKey:   pubKey,
+			Id:       nInfo.Id,
+		})
+	}
+
+	for _, nInfo := range n.Ring {
+		if nInfo.Id != n.Id {
+			sendContent, err := json.Marshal(nodes)
+			if err != nil {
+				return err
+			}
+			sendBody := bytes.NewBuffer(sendContent)
+			body, err := GetResponseBody(
+				http.DefaultClient.Post(
+					fmt.Sprintf("http://%s:%s/accept-nodes", nInfo.Hostname, nInfo.Port),
+					"application/json",
+					sendBody,
+				),
+			)
+			if err != nil {
+				return err
+			}
+
+			regCnt, err := strconv.Atoi(strings.Split(string(body), " ")[1])
+			if err != nil {
+				return err
+			}
+
+			if regCnt != n.nodecnt-1 {
+				log.Printf("Expected to register %d nodes, but %d were registered!", n.nodecnt-1, regCnt)
+			} else {
+				log.Println(string(body))
+			}
+		}
+	}
+
+	return nil
 }
-*/
+
+func (n *Node) StartSetup() {
+	//TODO(PAP): Wait for N nodes, broadcast ring info, wait for N responses,
+	//TODO(PAP): send genesis block and money spreading block(s)
+	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
+	// Wait for N nodes
+	for n.nodecnt != len(n.Ring) {
+		// Sleep for 3 seconds to avoid excessive polling
+		time.Sleep(3 * time.Second)
+	}
+
+	log.Println("All nodes connected")
+
+	// Broadcast Ring info
+	n.BroadcastRingInfo()
+
+	log.Println("Ring broadcasted successfully")
+	// Wait for genesis block to be mined
+	for n.CurrBlockId == 0 {
+		// Sleep for 3 seconds to avoid excessive polling
+		time.Sleep(3 * time.Second)
+	}
+
+	for _, nInfo := range n.Ring {
+		if nInfo.Id != n.Id {
+			tx, err := n.Wallet.CreateTx(100, nInfo.WInfo.PubKey)
+			if err != nil {
+				fmt.Print(err)
+				return
+			}
+
+			err = n.AcceptTx(tx)
+			if err != nil {
+				fmt.Print(err)
+				return
+			}
+		}
+	}
+
+	log.Println("Created initial transactions")
+}
 
 func (n *Node) Start() error {
 
@@ -331,13 +406,14 @@ func (n *Node) Start() error {
 			return fmt.Errorf("expected an integer as id, got '%s'", err)
 		}
 		log.Println("Assigned id", n.Id)
-		//TODO(PAP): Wait for N nodes, broadcast ring info, wait for N responses,
-		//TODO(PAP): send genesis block and money spreading block
 	} else {
 		genBlock := bck.CreateGenesisBlock(n.nodecnt, &n.Wallet.PrivKey.PublicKey)
 		if genBlock == nil {
 			return fmt.Errorf("genesis block creation failed")
 		}
+
+		jg.Add(n.StartSetup)
+
 		go n.MineBlock(genBlock)
 	}
 
