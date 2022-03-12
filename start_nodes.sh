@@ -31,7 +31,7 @@ for i in $(seq 0 $N); do
     # echo $sedIdentifier
     myCmd="./bin/noobcash-node"
     if [ $i -eq 0 ]; then
-        myCmd="$myCmd bootstrap"
+        myCmd="$myCmd bootstrap --nodecnt $((N+1))"
     fi
     myCmd="$myCmd --hostname $myHostString --apiport $myApiPort --difficulty $difficulty --capacity $capacity"
     # echo $myCmd
