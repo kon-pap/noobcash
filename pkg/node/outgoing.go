@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
@@ -16,6 +17,7 @@ type NodeInfo struct {
 	WInfo    *bck.WalletInfo
 	Hostname string
 	Port     string
+	Mu       sync.Mutex
 }
 
 func NewNodeInfo(id int, hostname, port string, pubKey *rsa.PublicKey) *NodeInfo {

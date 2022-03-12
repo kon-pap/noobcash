@@ -97,7 +97,7 @@ func (n *Node) createSubmitBlocksHandler() http.HandlerFunc {
 			return
 		}
 		for _, currBlock := range blocks {
-			n.IncBlockChan <- currBlock
+			n.incBlockChan <- currBlock
 		}
 		fmt.Fprintf(w, "Accepted %d block(s)", len(blocks))
 	}

@@ -18,7 +18,7 @@ type MuInt struct {
 // Doubly linked list used as transaction queue
 // wraps a mutex to facilitate multi-threaded access
 type TxQueue struct {
-	Mu    sync.Mutex
+	mu    sync.Mutex
 	queue *list.List
 }
 
@@ -28,11 +28,35 @@ func NewTxQueue() *TxQueue {
 	}
 }
 
+// Thread-safe enqueue
 func (tq *TxQueue) Enqueue(tx *bck.Transaction) {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+
 	tq.queue.PushBack(tx)
 }
 
+// Thread-safe EnqueueMany
+//
+// Extra effort made to lock for minimum possible time
+func (tq *TxQueue) EnqueueMany(txs []*bck.Transaction) {
+	extensionList := list.New()
+	for _, tx := range txs {
+		extensionList.PushBack(tx)
+	}
+
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+	tq.queue.PushBackList(extensionList)
+}
+
+// Thread-safe dequeue
+//
+// returns nil if queue is empty
 func (tq *TxQueue) Dequeue() *bck.Transaction {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+
 	e := tq.queue.Front()
 	if e == nil {
 		return nil
@@ -41,12 +65,21 @@ func (tq *TxQueue) Dequeue() *bck.Transaction {
 	return e.Value.(*bck.Transaction)
 }
 
+// Thread-safe DequeueMany
+//
+// returns nil if queueLen < n
 func (tq *TxQueue) DequeueMany(n int) []*bck.Transaction {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+
+	if tq.queue.Len() < n {
+		return nil
+	}
 	txs := make([]*bck.Transaction, n)
 	for i := 0; i < n; i++ {
 		tx := tq.Dequeue()
 		if tx == nil {
-			break
+			panic("TxQueue.DequeueMany: tx == nil, but queue.Len() >= n")
 		}
 		txs = append(txs, tx)
 	}
@@ -97,4 +130,14 @@ func (jg *JobGroup) RunAndWait() {
 		}(job)
 	}
 	jg.wg.Wait()
+}
+
+type stringSet map[string]struct{}
+
+func (ss stringSet) Add(s string) {
+	ss[s] = struct{}{}
+}
+func (ss stringSet) Contains(s string) bool {
+	_, ok := ss[s]
+	return ok
 }
