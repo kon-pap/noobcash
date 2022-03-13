@@ -210,12 +210,15 @@ func (n *Node) IsValidBlock(block *bck.Block) bool {
 		bck.HexEncodeByteSlice(block.ComputeHash()) == thisBlockHash // this block's hash is correct
 }
 
-func (n *Node) HandleStopMining(incomingBlock, almostMinedBlock *bck.Block) {
+// Restore any txs from almostAcceptedBlock that are not in incomingBlock
+func (n *Node) HandleRejectBlock(incomingBlock, almostAcceptedBlock *bck.Block) {
 	//TODO(ORF): Compare incomingBlock's and almostMinedBlock's transactions, and
 	//TODO(ORF): and call enqueueMany for any that were not in incomingBlock
 }
 
+// Should be usually called as a goroutine.
 func (n *Node) MineBlock(block *bck.Block) {
+	// TODO(ORF): Consider if mining should be locked
 	//*DONE(ORF): CHANGE this to insert the nonce in the block and hash it again
 	log.Println("Mining block", block.Index)
 	dif := strings.Repeat("0", bck.Difficulty)
@@ -225,10 +228,11 @@ func (n *Node) MineBlock(block *bck.Block) {
 
 	for {
 		//*DONE(ORF): Stop mining if a block is received
+		//!NOTE(ORF): May need some more care
 		select {
 		case incomingBlock := <-n.stopMiningChan:
 			log.Println("Stopping mining...")
-			n.HandleStopMining(incomingBlock, block)
+			n.HandleRejectBlock(incomingBlock, block)
 			return
 		default: // used to prevent blocking
 		}
