@@ -215,12 +215,55 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 	}
 
 	targetTxOut := NewTxOut(address, amount)
-	changeTxOut := NewTxOut(&w.PrivKey.PublicKey, sum-amount)
 	targetTxOut.ComputeAndFillHash()
-	changeTxOut.ComputeAndFillHash()
 	tx.Outputs[targetTxOut.Id] = targetTxOut
-	tx.Outputs[changeTxOut.Id] = changeTxOut
 
+	changeAmount := sum - amount
+	if changeAmount > 0 { // if change exists
+		changeTxOut := NewTxOut(&w.PrivKey.PublicKey, changeAmount)
+		changeTxOut.ComputeAndFillHash()
+		tx.Outputs[changeTxOut.Id] = changeTxOut
+	}
+
+	tx.ComputeAndFillHash()
+	return tx, nil
+}
+
+type TxTargetTy struct {
+	Address *rsa.PublicKey
+	Amount  int
+}
+
+func (w *Wallet) CreateMultiTargetTx(targets ...TxTargetTy) (*Transaction, error) {
+	var totalAmount int
+	for _, target := range targets {
+		totalAmount += target.Amount
+	}
+	if totalAmount <= 0 {
+		return nil, fmt.Errorf("tried to create transaction for %d", totalAmount)
+	}
+	if totalAmount > w.Balance {
+		return nil, fmt.Errorf("tried to create transaction for %d but only have %d", totalAmount, w.Balance)
+	}
+	tx := NewTransaction(&w.PrivKey.PublicKey, totalAmount)
+	sum, previousTxOuts, err := w.selectUTXOsLargestFirst(totalAmount)
+	if err != nil {
+		return nil, err
+	}
+	for _, txOut := range previousTxOuts {
+		tx.Inputs.Add(txOut.Id)
+	}
+	changeAmount := sum - totalAmount
+	for _, target := range targets {
+		targetTxOut := NewTxOut(target.Address, target.Amount)
+		targetTxOut.ComputeAndFillHash()
+		tx.Outputs[targetTxOut.Id] = targetTxOut
+	}
+	if changeAmount > 0 {
+		changeTxOut := NewTxOut(&w.PrivKey.PublicKey, changeAmount)
+		changeTxOut.ComputeAndFillHash()
+		tx.Outputs[changeTxOut.Id] = changeTxOut
+	}
 	tx.ComputeAndFillHash()
 	return tx, nil
 }
