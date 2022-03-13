@@ -353,6 +353,7 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 		case incomingBlock := <-n.incBlockChan:
 			//TODO: handle incomingBlock
 			log.Println("Processing received block...")
+			//TODO: Remove this fmt.Println (needed to look like it's being used)
 			fmt.Println("Incoming block:", incomingBlock)
 		}
 	}
@@ -459,29 +460,19 @@ func (n *Node) DoInitialBootstrapActions() {
 	// Resetting block capacity
 	bck.BlockCapacity = previousCapacity
 
-	for _, nInfo := range n.Ring {
-		if nInfo.Id != n.Id {
-			sendContent, err := json.Marshal(n.Chain)
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			sendBody := bytes.NewBuffer(sendContent)
-			body, err := GetResponseBody(
-				http.DefaultClient.Post(
-					fmt.Sprintf("http://%s:%s/submit-blocks", nInfo.Hostname, nInfo.Port),
-					"application/json",
-					sendBody,
-				),
-			)
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			log.Println(string(body))
-		}
+	sendContent, err := json.Marshal(n.Chain)
+	if err != nil {
+		log.Println(err)
+		return
 	}
-
+	replies, err := n.BroadcastByteSlice(sendContent, submitBlocksEndpoint)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	for _, reply := range replies {
+		log.Println("Fellow node replied:", reply)
+	}
 	log.Println("Sent chain to nodes. Game on!")
 }
 
