@@ -219,30 +219,29 @@ func (n *Node) HandleStopMining(incomingBlock, almostMinedBlock *bck.Block) {
 
 func (n *Node) MineBlock(block *bck.Block) {
 	//*DONE(ORF): CHANGE this to insert the nonce in the block and hash it again
+	if block.IsGenesis() {
+		panic("Node.MineBlock() called on genesis block")
+	}
 	log.Println("Mining block")
+	dif := strings.Repeat("0", bck.Difficulty)
 
-	// Skip mining genesis block
-	if !block.IsGenesis() {
-		dif := strings.Repeat("0", bck.Difficulty)
+	rand.Seed(time.Now().UnixNano())
+	nonce := make([]byte, 32)
 
-		rand.Seed(time.Now().UnixNano())
-		nonce := make([]byte, 32)
-
-		for {
-			//*DONE(ORF): Stop mining if a block is received
-			select {
-			case incomingBlock := <-n.stopMiningChan:
-				log.Println("Stopping mining...")
-				n.HandleStopMining(incomingBlock, block)
-				return
-			default: // used to prevent blocking
-			}
-			rand.Read(nonce[:])
-			block.Nonce = bck.HexEncodeByteSlice(nonce)
-			block.ComputeAndFillHash()
-			if strings.HasPrefix(bck.HexEncodeByteSlice(block.CurrentHash), dif) {
-				break
-			}
+	for {
+		//*DONE(ORF): Stop mining if a block is received
+		select {
+		case incomingBlock := <-n.stopMiningChan:
+			log.Println("Stopping mining...")
+			n.HandleStopMining(incomingBlock, block)
+			return
+		default: // used to prevent blocking
+		}
+		rand.Read(nonce[:])
+		block.Nonce = bck.HexEncodeByteSlice(nonce)
+		block.ComputeAndFillHash()
+		if strings.HasPrefix(bck.HexEncodeByteSlice(block.CurrentHash), dif) {
+			break
 		}
 	}
 	n.minedBlockChan <- block
