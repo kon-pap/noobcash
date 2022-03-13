@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 )
@@ -198,6 +199,7 @@ func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxO
 }
 
 func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, error) {
+	log.Println("Creating transaction for amount:", amount)
 	if amount <= 0 {
 		return nil, fmt.Errorf("tried to create transaction for %d", amount)
 	}
@@ -234,11 +236,12 @@ type TxTargetTy struct {
 	Amount  int
 }
 
-func (w *Wallet) CreateMultiTargetTx(targets ...TxTargetTy) (*Transaction, error) {
+func (w *Wallet) CreateMultiTargetTx(targets ...*TxTargetTy) (*Transaction, error) {
 	var totalAmount int
 	for _, target := range targets {
 		totalAmount += target.Amount
 	}
+	log.Println("Creating transaction for amount:", totalAmount, "and", len(targets), "targets")
 	if totalAmount <= 0 {
 		return nil, fmt.Errorf("tried to create transaction for %d", totalAmount)
 	}
@@ -275,4 +278,28 @@ func (w *Wallet) SignTx(tx *Transaction) error {
 	}
 	tx.Signature = signature
 	return nil
+}
+
+func (w *Wallet) CreateAndSignTx(amount int, address *rsa.PublicKey) (*Transaction, error) {
+	tx, err := w.CreateTx(amount, address)
+	if err != nil {
+		return nil, err
+	}
+	err = w.SignTx(tx)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+func (w *Wallet) CreateAndSignMultiTargetTx(targets ...*TxTargetTy) (*Transaction, error) {
+	tx, err := w.CreateMultiTargetTx(targets...)
+	if err != nil {
+		return nil, err
+	}
+	err = w.SignTx(tx)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
 }
