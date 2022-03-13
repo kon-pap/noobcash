@@ -204,8 +204,8 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 	if amount > w.Balance {
 		return nil, fmt.Errorf("tried to create transaction for %d but only have %d", amount, w.Balance)
 	}
-	tx := NewTransaction(&w.PrivKey.PublicKey, address, amount)
-	// TODO: coin selection algorithm to find utxos to use as TxIns
+	tx := NewTransaction(&w.PrivKey.PublicKey, amount)
+
 	sum, previousTxOuts, err := w.selectUTXOsLargestFirst(amount)
 	if err != nil {
 		return nil, err
