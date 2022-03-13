@@ -395,6 +395,8 @@ func (n *Node) BroadcastRingInfo() error {
 func (n *Node) DoInitialBootstrapActions() {
 	//*DONE(PAP): Wait for N nodes, broadcast ring info, wait for N responses,
 	//*DONE(PAP): send genesis block and money spreading block(s)
+	//!NOTE: Normally mined blocks will be broadcast automatically in the future
+	//!NOTE:   so the money-spreading block may need to be "accepted" after genesis broadcast
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
 
 	//*Wait/Poll omitted since it is started after N nodes have been registered
@@ -445,7 +447,6 @@ func (n *Node) DoInitialBootstrapActions() {
 				return
 			}
 			log.Printf("Accepted initial tx for node %d", nInfo.Id)
-
 			// Waiting to mine the block so as to update UTXOs
 			for len(n.Chain) != awaitedLen {
 				// Sleep for 3 seconds to avoid excessive polling
