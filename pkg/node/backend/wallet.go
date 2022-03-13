@@ -158,29 +158,6 @@ func PubKeyFromPem(s string) *rsa.PublicKey {
 	return key
 }
 
-// func (w *Wallet) SaveWallet(path string) {
-// 	fullKeyPath := path
-// 	os.MkdirAll(fullKeyPath, 0755)
-
-// 	privateKeyPem := w.PrivKeyToPem()
-// 	err := ioutil.WriteFile(fullKeyPath+"/private.pem", []byte(privateKeyPem), 0644)
-// 	if err != nil {
-// 		fmt.Print(err)
-// 		os.Exit(1)
-// 	}
-// }
-// func LoadWallet(path string) *Wallet {
-// 	fullKeyPath := path
-// 	privateKeyBytes, err := ioutil.ReadFile(fullKeyPath + "/private.pem")
-// 	if err != nil {
-// 		fmt.Print(err)
-// 		os.Exit(1)
-// 	}
-// 	privateKey := PrivKeyFromPem(string(privateKeyBytes))
-// 	return &Wallet{
-// 		PrivKey: privateKey,
-// 	}
-// }
 type utxoTmp struct {
 	key string
 	val *TxOut

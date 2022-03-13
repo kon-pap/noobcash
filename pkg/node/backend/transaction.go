@@ -167,6 +167,10 @@ func NewGenesisTransaction(to *rsa.PublicKey, amount int) *Transaction {
 	return newTx
 }
 
+func (tx *Transaction) IsGenesis() bool {
+	return tx.SenderAddress == nil
+}
+
 func (tx *Transaction) ComputeAndFillHash() {
 	txInfoBytes, err := json.Marshal(tx)
 	if err != nil {

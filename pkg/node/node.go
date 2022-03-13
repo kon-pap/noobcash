@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +18,7 @@ import (
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
-const checkTxCountIntervalMilliSeconds = 5
+const checkTxCountIntervalSeconds = 5
 
 var BootstrapHostname string
 
@@ -66,6 +67,7 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 	return newNode
 }
 
+// Initialize any fields required for the node to act as bootstrap
 func (n *Node) MakeBootstrap(nodecnt int) {
 	log.Println("Becoming bootstrap...")
 	n.Id = 0
@@ -197,7 +199,7 @@ func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 //* BLOCK
 func (n *Node) IsValidBlock(block *bck.Block) bool {
 	// GenesisBlock is valid
-	if string(block.PreviousHash) == "1" {
+	if block.IsGenesis() {
 		return true
 	}
 	dif := strings.Repeat("0", bck.Difficulty)
@@ -217,26 +219,30 @@ func (n *Node) HandleStopMining(incomingBlock, almostMinedBlock *bck.Block) {
 
 func (n *Node) MineBlock(block *bck.Block) {
 	//*DONE(ORF): CHANGE this to insert the nonce in the block and hash it again
-	log.Println("Mining block", block.Index)
-	dif := strings.Repeat("0", bck.Difficulty)
+	log.Println("Mining block")
 
-	rand.Seed(time.Now().UnixNano())
-	nonce := make([]byte, 32)
+	// Skip mining genesis block
+	if !block.IsGenesis() {
+		dif := strings.Repeat("0", bck.Difficulty)
 
-	for {
-		//*DONE(ORF): Stop mining if a block is received
-		select {
-		case incomingBlock := <-n.stopMiningChan:
-			log.Println("Stopping mining...")
-			n.HandleStopMining(incomingBlock, block)
-			return
-		default: // used to prevent blocking
-		}
-		rand.Read(nonce[:])
-		block.Nonce = bck.HexEncodeByteSlice(nonce)
-		block.ComputeAndFillHash()
-		if strings.HasPrefix(bck.HexEncodeByteSlice(block.CurrentHash), dif) {
-			break
+		rand.Seed(time.Now().UnixNano())
+		nonce := make([]byte, 32)
+
+		for {
+			//*DONE(ORF): Stop mining if a block is received
+			select {
+			case incomingBlock := <-n.stopMiningChan:
+				log.Println("Stopping mining...")
+				n.HandleStopMining(incomingBlock, block)
+				return
+			default: // used to prevent blocking
+			}
+			rand.Read(nonce[:])
+			block.Nonce = bck.HexEncodeByteSlice(nonce)
+			block.ComputeAndFillHash()
+			if strings.HasPrefix(bck.HexEncodeByteSlice(block.CurrentHash), dif) {
+				break
+			}
 		}
 	}
 	n.minedBlockChan <- block
@@ -324,7 +330,7 @@ func (n *Node) CheckTxQueueForMining() {
 	//TODO(ORF): Rethink interval of polling. Millisecond interval causes starvation
 	//because DequeueMany uses the lock. I set it to time.Second to proceed
 	//If not starvation, some serious race condition is waiting us
-	ticker := time.NewTicker(time.Second * checkTxCountIntervalMilliSeconds)
+	ticker := time.NewTicker(time.Second * checkTxCountIntervalSeconds)
 	for range ticker.C {
 		if txs := n.pendingTxs.DequeueMany(bck.BlockCapacity); txs != nil {
 			newBlock := bck.NewBlock(n.getLastBlock().CurrentHash)
@@ -363,62 +369,51 @@ func (n *Node) BroadcastRingInfo() error {
 			Id:       nInfo.Id,
 		})
 	}
-
-	for _, nInfo := range n.Ring {
-		if nInfo.Id != n.Id {
-			sendContent, err := json.Marshal(nodes)
-			if err != nil {
-				return err
-			}
-			sendBody := bytes.NewBuffer(sendContent)
-			body, err := GetResponseBody(
-				http.DefaultClient.Post(
-					fmt.Sprintf("http://%s:%s/accept-nodes", nInfo.Hostname, nInfo.Port),
-					"application/json",
-					sendBody,
-				),
-			)
-			if err != nil {
-				return err
-			}
-
-			regCnt, err := strconv.Atoi(strings.Split(string(body), " ")[1])
-			if err != nil {
-				return err
-			}
-
-			if regCnt != n.nodecnt-1 {
-				log.Printf("Expected to register %d nodes, but %d were registered!", n.nodecnt-1, regCnt)
-			} else {
-				log.Println(string(body))
-			}
+	sendContent, err := json.Marshal(nodes)
+	if err != nil {
+		return err
+	}
+	replies, err := n.BroadcastByteSlice(sendContent, acceptNodesEndpoint)
+	if err != nil {
+		return err
+	}
+	for _, reply := range replies {
+		regCnt, err := strconv.Atoi(strings.Split(reply, " ")[1])
+		if err != nil {
+			return err
+		}
+		if regCnt != n.nodecnt-1 {
+			log.Printf("Fellow node registered  %d nodes, but should have registered %d ", regCnt, n.nodecnt-1)
+		} else {
+			log.Println("Fellow node replied:", reply)
 		}
 	}
 
 	return nil
 }
 
-func (n *Node) StartSetup() {
+func (n *Node) DoInitialBootstrapActions() {
 	//*DONE(PAP): Wait for N nodes, broadcast ring info, wait for N responses,
 	//*DONE(PAP): send genesis block and money spreading block(s)
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
-	// Wait for N nodes
-	for n.nodecnt != len(n.Ring) {
-		// Sleep for 1 second to avoid excessive polling
-		time.Sleep(time.Second)
-	}
 
-	log.Println("All nodes connected")
+	//*Wait/Poll omitted since it is started after N nodes have been registered
 
 	// Broadcast Ring info
-	n.BroadcastRingInfo()
-
-	log.Println("Ring broadcasted successfully")
-	// Wait for genesis block to be mined
-	for len(n.Chain) == 0 {
-		// Sleep for 1 second to avoid excessive polling
-		time.Sleep(time.Second)
+	err := n.BroadcastRingInfo()
+	if err != nil {
+		log.Println("Error broadcasting ring info:", err)
+		os.Exit(1)
 	}
+	log.Println("Ring broadcasted successfully")
+
+	genBlock := bck.CreateGenesisBlock(n.nodecnt, &n.Wallet.PrivKey.PublicKey)
+	if genBlock == nil {
+		log.Println("Error creating genesis block")
+		os.Exit(1)
+	}
+	n.ApplyBlock(genBlock)
+	//*Wait/Poll omitted since we can apply genesis block (blocking-ly) without mining it
 
 	log.Println("Genesis is in the chain")
 
@@ -432,28 +427,24 @@ func (n *Node) StartSetup() {
 		if nInfo.Id != n.Id {
 			tx, err := n.Wallet.CreateTx(100, nInfo.WInfo.PubKey)
 			if err != nil {
-				log.Print(err)
+				log.Println(err)
 				return
 			}
 			log.Printf("Created initial tx for node %d", nInfo.Id)
 
 			err = n.Wallet.SignTx(tx)
 			if err != nil {
-				log.Print(err)
+				log.Println(err)
 				return
 			}
 			log.Printf("Signed initial tx for node %d", nInfo.Id)
 
 			err = n.AcceptTx(tx)
 			if err != nil {
-				log.Print(err)
+				log.Println(err)
 				return
 			}
 			log.Printf("Accepted initial tx for node %d", nInfo.Id)
-
-			newBlock := bck.NewBlock(n.getLastBlock().CurrentHash)
-			newBlock.AddTx(tx)
-			n.MineBlock(newBlock)
 
 			// Waiting to mine the block so as to update UTXOs
 			for len(n.Chain) != awaitedLen {
@@ -506,15 +497,6 @@ func (n *Node) Start() error {
 			return fmt.Errorf("expected an integer as id, got '%s'", err)
 		}
 		log.Println("Assigned id", n.Id)
-	} else {
-		genBlock := bck.CreateGenesisBlock(n.nodecnt, &n.Wallet.PrivKey.PublicKey)
-		if genBlock == nil {
-			return fmt.Errorf("genesis block creation failed")
-		}
-
-		jg.Add(n.StartSetup)
-
-		go n.MineBlock(genBlock)
 	}
 
 	jg.Add(func() { n.ServeApiForCli(n.apiport) })

@@ -40,7 +40,21 @@ func (n *Node) SendByteSlice(data []byte, hostname, port string, endpoint endpoi
 	)
 }
 
-//TODO(PAP): func (n *Node) BroadcastByteSlice(data []byte, endpoint endpointTy) error {}
+func (n *Node) BroadcastByteSlice(data []byte, endpoint endpointTy) ([]string, error) {
+	log.Println("Broadcasting to", endpoint)
+	replies := make([]string, 0, len(n.Ring))
+	for _, node := range n.Ring {
+		if node.Id == n.Id {
+			continue
+		}
+		reply, err := n.SendByteSlice(data, node.Hostname, node.Port, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		replies = append(replies, reply)
+	}
+	return replies, nil
+}
 
 func (n *Node) TrySendByteSlice(data []byte, hostname, port string, endpoint endpointTy) {
 	log.Println("Sending to", hostname, port, endpoint)
