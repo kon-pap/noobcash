@@ -211,14 +211,28 @@ func (n *Node) IsValidBlock(block *bck.Block) bool {
 }
 
 // Restore any txs from almostAcceptedBlock that are not in incomingBlock
-func (n *Node) HandleRejectBlock(incomingBlock, almostAcceptedBlock *bck.Block) {
-	//TODO(ORF): Compare incomingBlock's and almostMinedBlock's transactions, and
-	//TODO(ORF): and call enqueueMany for any that were not in incomingBlock
+func (n *Node) HandleRejectBlock(almostAcceptedBlock, incomingBlock *bck.Block) {
+	//*DONE(ORF): Compare incomingBlock's and almostMinedBlock's transactions, and
+	//*DONE(ORF): and call enqueueMany for any that were not in incomingBlock
+	txIdsToLookFor := make(stringSet)
+	for _, tx := range incomingBlock.Transactions {
+		txIdsToLookFor.AddByteSlice(tx.Id)
+	}
+	txsToReInsert := make([]*bck.Transaction, 0, len(almostAcceptedBlock.Transactions))
+	for _, tx := range almostAcceptedBlock.Transactions {
+		if !txIdsToLookFor.ContainsByteSlice(tx.Id) {
+			txsToReInsert = append(txsToReInsert, tx)
+		}
+	}
+	n.pendingTxs.DequeueManyByValue(txIdsToLookFor)
+	// TODO(ORF): Ensure locking is done properly here (after pull-requests)
+	n.pendingTxs.EnqueueMany(txsToReInsert)
 }
 
 // Should be usually called as a goroutine.
 func (n *Node) MineBlock(block *bck.Block) {
 	// TODO(ORF): Consider if mining should be locked
+	// TODO(ORF): Consider if mining should check if block is valid before starting
 	//*DONE(ORF): CHANGE this to insert the nonce in the block and hash it again
 	log.Println("Mining block", block.Index)
 	dif := strings.Repeat("0", bck.Difficulty)
@@ -232,7 +246,7 @@ func (n *Node) MineBlock(block *bck.Block) {
 		select {
 		case incomingBlock := <-n.stopMiningChan:
 			log.Println("Stopping mining...")
-			n.HandleRejectBlock(incomingBlock, block)
+			n.HandleRejectBlock(block, incomingBlock)
 			return
 		default: // used to prevent blocking
 		}
