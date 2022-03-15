@@ -169,6 +169,7 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 
 }
 
+
 func (n *Node) LockTxParticipants(tx *bck.Transaction) func() {
 	myLockedPubKeys := make(stringSet)
 	if tx.SenderAddress != nil {
@@ -191,11 +192,16 @@ func (n *Node) LockTxParticipants(tx *bck.Transaction) func() {
 	}
 }
 
-/*
 //TODO(BILL)
 func (n *Node) BroadcastTx(tx *bck.Transaction) error {
+	txInSlice := []*bck.Transaction{tx}
+	dataInJSON, err := json.Marshal(txInSlice)
+	if err != nil {
+		return err
+	}
+	n.TryBroadcastByteSlice(dataInJSON, submitTxsEndpoint)
+	return nil
 }
-*/
 
 //* BLOCK
 func (n *Node) IsValidBlock(block *bck.Block) bool {
@@ -270,12 +276,16 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 	return nil
 }
 
-/*
 //TODO(BILL)
 func (n *Node) BroadcastBlock(block *bck.Block) error {
+	tmpBlock := []*bck.Block{block}
+	blockInJson, err := json.Marshal(tmpBlock)
+	if err != nil {
+		return err
+	}
+	n.TryBroadcastByteSlice(blockInJson, submitBlocksEndpoint)
+	return nil
 }
-*/
-//might need to check if nonce is correct
 
 //* CHAIN
 func (n *Node) getLastBlock() *bck.Block {
