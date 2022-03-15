@@ -18,8 +18,11 @@ var submitCmd = &cobra.Command{
 		if len(args) != 2 {
 			return fmt.Errorf("invalid number of arguments. expected 2, got %d", len(args))
 		}
-		recipient := args[0]
-		_, err := strconv.Atoi(args[1])
+		_, err := strconv.Atoi(args[0])
+		if err != nil {
+			return err
+		}
+		_, err = strconv.Atoi(args[1])
 		if err != nil {
 			return err
 		}
@@ -27,7 +30,7 @@ var submitCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		transactionJson := bytes.NewBuffer([]byte(`{"recipient":"` + recipient + `","amount":` + args[1] + `}`))
+		transactionJson := bytes.NewBuffer([]byte(`{"recipient":` + args[0] + `,"amount":` + args[1] + `}`))
 		body, err := node.GetResponseBody(
 			http.Post(fmt.Sprintf("http://%s:%d/submit", ip, port), "application/json", transactionJson),
 		)

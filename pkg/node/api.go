@@ -1,6 +1,7 @@
 package node
 
 import (
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -53,8 +54,8 @@ func (n *Node) createGiveLastBlockHandler() http.HandlerFunc {
 }
 
 type reqTx struct {
-	Recipient string `json:"recipient"`
-	Amount    int    `json:"amount"`
+	Recipient int `json:"recipient"`
+	Amount    int `json:"amount"`
 }
 
 func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
@@ -66,8 +67,34 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 			http.Error(w, errMsg, http.StatusBadRequest)
 			return
 		}
-		fmt.Fprintf(w, "Submitting transaction to %s for %d", tx.Recipient, tx.Amount)
-		// TODO: CreateTx, SignTx, AcceptTx
-		// n.SubmitTx(tx.Recipient, tx.Amount)
+		fmt.Fprintf(w, "Submitting transaction to node %d for %d", tx.Recipient, tx.Amount)
+		//* DONE(PAP): CreateTx, SignTx, AcceptTx, BcastTx
+		var address *rsa.PublicKey
+		for _, nInfo := range n.Ring {
+			if nInfo.Id == tx.Recipient {
+				address = nInfo.WInfo.PubKey
+				break
+			}
+		}
+		createdTx, err := n.Wallet.CreateAndSignTx(tx.Amount, address)
+		if err != nil {
+			errMsg := fmt.Sprintf("Creating transaction error: %s", err.Error())
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+
+		err = n.AcceptTx(createdTx)
+		if err != nil {
+			errMsg := fmt.Sprintf("Accepting transaction error: %s", err.Error())
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+
+		err = n.BroadcastTx(createdTx)
+		if err != nil {
+			errMsg := fmt.Sprintf("Broadcasting transaction error: %s", err.Error())
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
 	}
 }

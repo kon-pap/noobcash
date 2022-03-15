@@ -188,6 +188,7 @@ func (n *Node) LockTxParticipants(tx *bck.Transaction) func() {
 	}
 }
 
+//*DONE(BILL)
 func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 	txInSlice := []*bck.Transaction{tx}
 	dataInJSON, err := json.Marshal(txInSlice)
@@ -279,6 +280,7 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 	return nil
 }
 
+//*DONE(BILL)
 func (n *Node) BroadcastBlock(block *bck.Block) error {
 	tmpBlock := []*bck.Block{block}
 	blockInJson, err := json.Marshal(tmpBlock)
@@ -431,7 +433,7 @@ func (n *Node) DoInitialBootstrapActions() {
 	//*DONE(PAP): send genesis block and money spreading block(s)
 	//!NOTE: Normally mined blocks will be broadcast automatically in the future
 	//!NOTE:   so the money-spreading block may need to be "accepted" after genesis broadcast
-	//*DONE(ORF): Money-spreading block can be submitted normaly
+	//* DONE(PAP): Money-spreading block can be submitted normaly
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
 
 	// Broadcast Ring info
@@ -451,7 +453,7 @@ func (n *Node) DoInitialBootstrapActions() {
 	log.Println("Genesis is in the chain")
 
 	n.BroadcastBlock(genBlock)
-	log.Println("Genesis block broadcasted successfully")
+	log.Println("Genesis is broadcasted")
 
 	// Setting block capacity to 1
 	//! Works because we don't check block capacity in isValidBlock
@@ -485,6 +487,8 @@ func (n *Node) DoInitialBootstrapActions() {
 	log.Println("Created initial transactions and added to the chain")
 	// Resetting block capacity
 	bck.BlockCapacity = previousCapacity
+
+	log.Println("Reset block capacity. Game on!")
 }
 
 func (n *Node) ConnectToBootstrapJob() {
