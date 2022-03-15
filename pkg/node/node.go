@@ -424,36 +424,29 @@ func (n *Node) DoInitialBootstrapActions() {
 	previousCapacity := bck.BlockCapacity
 	bck.BlockCapacity = 1
 
-	awaitedLen := 2
+	targets := make([]*bck.TxTargetTy, 0, n.nodecnt-1)
 	for _, nInfo := range n.Ring {
-		if nInfo.Id != n.Id {
-			tx, err := n.Wallet.CreateTx(100, nInfo.WInfo.PubKey)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			log.Printf("Created initial tx for node %d", nInfo.Id)
-
-			err = n.Wallet.SignTx(tx)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			log.Printf("Signed initial tx for node %d", nInfo.Id)
-
-			err = n.AcceptTx(tx)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			log.Printf("Accepted initial tx for node %d", nInfo.Id)
-			// Waiting to mine the block so as to update UTXOs
-			for len(n.Chain) != awaitedLen {
-				// Sleep for 3 seconds to avoid excessive polling
-				time.Sleep(time.Second)
-			}
-			awaitedLen++
+		if nInfo.Id == n.Id {
+			continue
 		}
+		targets = append(targets, &bck.TxTargetTy{
+			Address: nInfo.WInfo.PubKey,
+			Amount:  100,
+		})
+	}
+	tx, err := n.Wallet.CreateAndSignMultiTargetTx(targets...)
+	if err != nil {
+		log.Println("Error creating/signing transaction:", err)
+		os.Exit(1)
+	}
+	err = n.AcceptTx(tx)
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+	for len(n.Chain) == 1 {
+		// Sleep for 3 seconds to avoid excessive polling
+		time.Sleep(time.Second)
 	}
 
 	log.Println("Created initial transactions and added to the chain")
