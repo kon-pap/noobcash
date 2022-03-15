@@ -134,8 +134,8 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 
 	// Skip this if tx is the genesis transaction
 	if tx.SenderAddress != nil {
-		stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
-		senderWallet := n.Ring[stringSenderAddress].WInfo
+		senderAddress = bck.PubKeyToPem(tx.SenderAddress)
+		senderWalletInfo = n.Ring[senderAddress].WInfo
 		// thisIsSender := stringSenderAddress == stringNodeAddress
 
 		for txInId := range tx.Inputs {
@@ -471,24 +471,27 @@ func (n *Node) DoInitialBootstrapActions() {
 	log.Println("Sent chain to nodes. Game on!")
 }
 
+func (n *Node) ConnectToBootstrapJob() {
+	log.Println("Connecting to bootstrap...")
+	err := n.ConnectToBootstrap()
+	if err != nil {
+		log.Fatalf("expected an integer as id, got '%s'", err)
+	}
+	log.Println("Assigned id", n.Id)
+}
+
 func (n *Node) Start() error {
 
 	var jg JobGroup
 
-	if !n.IsBootstrap() {
-		log.Println("Connecting to bootstrap...")
-		err := n.ConnectToBootstrap()
-		if err != nil {
-			return fmt.Errorf("expected an integer as id, got '%s'", err)
-		}
-		log.Println("Assigned id", n.Id)
-	}
-
 	jg.Add(func() { n.ServeApiForCli(n.apiport) })
 	jg.Add(func() { n.ServeApiForNodes(n.info.Port) })
 	jg.Add(n.SelectMinedOrIncomingBlock)
-	//*DONE(ORF): Add a job to check for enough txs for a new block
 	jg.Add(n.CheckTxQueueForMining)
+
+	if !n.IsBootstrap() {
+		jg.Add(n.ConnectToBootstrapJob)
+	}
 
 	jg.RunAndWait()
 
