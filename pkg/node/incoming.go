@@ -97,7 +97,7 @@ func (n *Node) createSubmitBlocksHandler() http.HandlerFunc {
 			return
 		}
 		for _, currBlock := range blocks {
-			n.IncBlockChan <- currBlock
+			n.incBlockChan <- currBlock
 		}
 		fmt.Fprintf(w, "Accepted %d block(s)", len(blocks))
 	}
@@ -154,6 +154,11 @@ func (n *Node) createBootstrapNodeHandler() http.HandlerFunc {
 		)
 		n.BsNextNodeId.Value++
 		n.BsNextNodeId.Mu.Unlock()
+
+		if n.nodecnt == len(n.Ring) {
+			log.Println("All nodes now connected")
+			go n.DoInitialBootstrapActions()
+		}
 
 		fmt.Fprintf(w, "%d", n.Ring[node.PubKey].Id)
 	}
