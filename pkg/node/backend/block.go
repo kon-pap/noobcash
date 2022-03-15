@@ -24,9 +24,9 @@ type Block struct {
 	PreviousHash []byte
 }
 
-func NewBlock(index int, prevHash []byte) *Block {
+func NewBlock(prevHash []byte) *Block {
 	return &Block{
-		Index:        index,
+		Index:        -1,
 		Timestamp:    time.Now(),
 		PreviousHash: prevHash,
 	}
@@ -90,10 +90,6 @@ func (b *Block) AddManyTxs(txs []*Transaction) error {
 	return nil
 }
 
-func (b *Block) UpdateNonce(nonce string) {
-	b.Nonce = nonce
-}
-
 func (b *Block) IsFull() bool {
 	return BlockCapacity == len(b.Transactions)
 }
@@ -113,14 +109,17 @@ func (b *Block) marshalJSONHash() ([]byte, error) {
 	})
 }
 
-func (b *Block) ComputeAndFillHash() {
+func (b *Block) ComputeHash() []byte {
 	txInfoBytes, err := b.marshalJSONHash()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	byteArray := (sha256.Sum256(txInfoBytes))
-	b.CurrentHash = byteArray[:]
+	return byteArray[:]
+}
+func (b *Block) ComputeAndFillHash() {
+	b.CurrentHash = b.ComputeHash()
 }
 
 func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
@@ -137,4 +136,13 @@ func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
 	}
 	b.ComputeAndFillHash()
 	return b
+}
+
+func (b *Block) IsGenesis() bool {
+	return b.Nonce == "00" &&
+		string(b.PreviousHash) == "1" &&
+		len(b.Transactions) == 1 &&
+		b.Transactions[0].IsGenesis() &&
+		b.Index == 0 &&
+		b.Nonce == "00"
 }

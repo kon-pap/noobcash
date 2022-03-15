@@ -31,7 +31,7 @@ for i in $(seq 0 $N); do
     # echo $sedIdentifier
     myCmd="./bin/noobcash-node"
     if [ $i -eq 0 ]; then
-        myCmd="$myCmd bootstrap"
+        myCmd="$myCmd bootstrap --nodecnt $((N+1))"
     fi
     myCmd="$myCmd --hostname $myHostString --apiport $myApiPort --difficulty $difficulty --capacity $capacity"
     # echo $myCmd
@@ -41,5 +41,5 @@ for i in $(seq 0 $N); do
     CMD="$CMD $myCmd 2>&1 >/dev/null | sed -e $sedIdentifier"
 done
 # ps | grep noobcash-node | grep -v 'grep' | cut -d' ' -f2 | xargs kill
-trap "ps | grep noobcash-node | grep -v 'grep' | cut -d' ' -f2 | xargs kill" SIGINT
+trap "pgrep -f noobcash-node | xargs kill" SIGINT
 eval $CMD
