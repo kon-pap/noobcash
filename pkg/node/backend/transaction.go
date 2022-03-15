@@ -68,13 +68,13 @@ func (txout *TxOut) ComputeAndFillHash() {
 }
 
 type Transaction struct {
-	SenderAddress   *rsa.PublicKey
-	ReceiverAddress *rsa.PublicKey
-	Amount          int
-	Id              []byte
-	Inputs          InputSetTy
-	Outputs         map[string]*TxOut
-	Signature       []byte
+	SenderAddress *rsa.PublicKey
+	// ReceiverAddress *rsa.PublicKey
+	Amount    int
+	Id        []byte
+	Inputs    InputSetTy
+	Outputs   map[string]*TxOut
+	Signature []byte
 }
 type transactionJson struct {
 	Id              string   `json:"id"`
@@ -100,13 +100,13 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		i++
 	}
 	return json.Marshal(transactionJson{
-		Id:              HexEncodeByteSlice(tx.Id),
-		SenderAddress:   PubKeyToPem(tx.SenderAddress),
-		ReceiverAddress: PubKeyToPem(tx.ReceiverAddress),
-		Amount:          tx.Amount,
-		Inputs:          txIns,
-		Outputs:         txOuts,
-		Signature:       HexEncodeByteSlice(tx.Signature),
+		Id:            HexEncodeByteSlice(tx.Id),
+		SenderAddress: PubKeyToPem(tx.SenderAddress),
+		// ReceiverAddress: PubKeyToPem(tx.ReceiverAddress),
+		Amount:    tx.Amount,
+		Inputs:    txIns,
+		Outputs:   txOuts,
+		Signature: HexEncodeByteSlice(tx.Signature),
 	})
 }
 func (tx *Transaction) UnmarshalJSON(b []byte) error {
@@ -126,7 +126,7 @@ func (tx *Transaction) UnmarshalJSON(b []byte) error {
 
 	tx.Id = HexDecodeByteSlice(txJson.Id)
 	tx.SenderAddress = PubKeyFromPem(txJson.SenderAddress)
-	tx.ReceiverAddress = PubKeyFromPem(txJson.ReceiverAddress)
+	// tx.ReceiverAddress = PubKeyFromPem(txJson.ReceiverAddress)
 	tx.Amount = txJson.Amount
 	tx.Inputs = txIns
 	tx.Outputs = txOuts
@@ -142,18 +142,18 @@ func (tx *Transaction) String() string {
 	return string(strBytes)
 }
 
-func NewTransaction(from, to *rsa.PublicKey, amount int) *Transaction {
+func NewTransaction(from *rsa.PublicKey, amount int) *Transaction {
 	return &Transaction{
-		SenderAddress:   from,
-		ReceiverAddress: to,
-		Amount:          amount,
-		Inputs:          InputSetTy{},
-		Outputs:         map[string]*TxOut{},
+		SenderAddress: from,
+		// ReceiverAddress: to,
+		Amount:  amount,
+		Inputs:  InputSetTy{},
+		Outputs: map[string]*TxOut{},
 	}
 }
 
 func NewGenesisTransaction(to *rsa.PublicKey, amount int) *Transaction {
-	newTx := NewTransaction(nil, to, amount)
+	newTx := NewTransaction(nil, amount)
 	newTx.Id = []byte("genesis")
 
 	newTxOut := NewTxOut(to, amount)
@@ -165,6 +165,10 @@ func NewGenesisTransaction(to *rsa.PublicKey, amount int) *Transaction {
 	// newTxOut.TransactionId = HexEncodeByteSlice(newTx.Id)
 
 	return newTx
+}
+
+func (tx *Transaction) IsGenesis() bool {
+	return tx.SenderAddress == nil
 }
 
 func (tx *Transaction) ComputeAndFillHash() {

@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 )
@@ -158,29 +159,6 @@ func PubKeyFromPem(s string) *rsa.PublicKey {
 	return key
 }
 
-// func (w *Wallet) SaveWallet(path string) {
-// 	fullKeyPath := path
-// 	os.MkdirAll(fullKeyPath, 0755)
-
-// 	privateKeyPem := w.PrivKeyToPem()
-// 	err := ioutil.WriteFile(fullKeyPath+"/private.pem", []byte(privateKeyPem), 0644)
-// 	if err != nil {
-// 		fmt.Print(err)
-// 		os.Exit(1)
-// 	}
-// }
-// func LoadWallet(path string) *Wallet {
-// 	fullKeyPath := path
-// 	privateKeyBytes, err := ioutil.ReadFile(fullKeyPath + "/private.pem")
-// 	if err != nil {
-// 		fmt.Print(err)
-// 		os.Exit(1)
-// 	}
-// 	privateKey := PrivKeyFromPem(string(privateKeyBytes))
-// 	return &Wallet{
-// 		PrivKey: privateKey,
-// 	}
-// }
 type utxoTmp struct {
 	key string
 	val *TxOut
@@ -221,14 +199,15 @@ func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxO
 }
 
 func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, error) {
+	log.Println("Creating transaction for amount:", amount)
 	if amount <= 0 {
 		return nil, fmt.Errorf("tried to create transaction for %d", amount)
 	}
 	if amount > w.Balance {
 		return nil, fmt.Errorf("tried to create transaction for %d but only have %d", amount, w.Balance)
 	}
-	tx := NewTransaction(&w.PrivKey.PublicKey, address, amount)
-	// TODO: coin selection algorithm to find utxos to use as TxIns
+	tx := NewTransaction(&w.PrivKey.PublicKey, amount)
+
 	sum, previousTxOuts, err := w.selectUTXOsLargestFirst(amount)
 	if err != nil {
 		return nil, err
@@ -238,12 +217,56 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 	}
 
 	targetTxOut := NewTxOut(address, amount)
-	changeTxOut := NewTxOut(&w.PrivKey.PublicKey, sum-amount)
 	targetTxOut.ComputeAndFillHash()
-	changeTxOut.ComputeAndFillHash()
 	tx.Outputs[targetTxOut.Id] = targetTxOut
-	tx.Outputs[changeTxOut.Id] = changeTxOut
 
+	changeAmount := sum - amount
+	if changeAmount > 0 { // if change exists
+		changeTxOut := NewTxOut(&w.PrivKey.PublicKey, changeAmount)
+		changeTxOut.ComputeAndFillHash()
+		tx.Outputs[changeTxOut.Id] = changeTxOut
+	}
+
+	tx.ComputeAndFillHash()
+	return tx, nil
+}
+
+type TxTargetTy struct {
+	Address *rsa.PublicKey
+	Amount  int
+}
+
+func (w *Wallet) CreateMultiTargetTx(targets ...*TxTargetTy) (*Transaction, error) {
+	var totalAmount int
+	for _, target := range targets {
+		totalAmount += target.Amount
+	}
+	log.Println("Creating transaction for amount:", totalAmount, "and", len(targets), "targets")
+	if totalAmount <= 0 {
+		return nil, fmt.Errorf("tried to create transaction for %d", totalAmount)
+	}
+	if totalAmount > w.Balance {
+		return nil, fmt.Errorf("tried to create transaction for %d but only have %d", totalAmount, w.Balance)
+	}
+	tx := NewTransaction(&w.PrivKey.PublicKey, totalAmount)
+	sum, previousTxOuts, err := w.selectUTXOsLargestFirst(totalAmount)
+	if err != nil {
+		return nil, err
+	}
+	for _, txOut := range previousTxOuts {
+		tx.Inputs.Add(txOut.Id)
+	}
+	changeAmount := sum - totalAmount
+	for _, target := range targets {
+		targetTxOut := NewTxOut(target.Address, target.Amount)
+		targetTxOut.ComputeAndFillHash()
+		tx.Outputs[targetTxOut.Id] = targetTxOut
+	}
+	if changeAmount > 0 {
+		changeTxOut := NewTxOut(&w.PrivKey.PublicKey, changeAmount)
+		changeTxOut.ComputeAndFillHash()
+		tx.Outputs[changeTxOut.Id] = changeTxOut
+	}
 	tx.ComputeAndFillHash()
 	return tx, nil
 }
@@ -255,4 +278,28 @@ func (w *Wallet) SignTx(tx *Transaction) error {
 	}
 	tx.Signature = signature
 	return nil
+}
+
+func (w *Wallet) CreateAndSignTx(amount int, address *rsa.PublicKey) (*Transaction, error) {
+	tx, err := w.CreateTx(amount, address)
+	if err != nil {
+		return nil, err
+	}
+	err = w.SignTx(tx)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+func (w *Wallet) CreateAndSignMultiTargetTx(targets ...*TxTargetTy) (*Transaction, error) {
+	tx, err := w.CreateMultiTargetTx(targets...)
+	if err != nil {
+		return nil, err
+	}
+	err = w.SignTx(tx)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
 }
