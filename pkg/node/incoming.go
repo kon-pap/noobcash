@@ -155,6 +155,11 @@ func (n *Node) createBootstrapNodeHandler() http.HandlerFunc {
 		n.BsNextNodeId.Value++
 		n.BsNextNodeId.Mu.Unlock()
 
+		if n.nodecnt == len(n.Ring) {
+			log.Println("All nodes now connected")
+			go n.DoInitialBootstrapActions()
+		}
+
 		fmt.Fprintf(w, "%d", n.Ring[node.PubKey].Id)
 	}
 

@@ -26,7 +26,7 @@ type Block struct {
 
 func NewBlock(prevHash []byte) *Block {
 	return &Block{
-		// Index:        index,
+		Index:        -1,
 		Timestamp:    time.Now(),
 		PreviousHash: prevHash,
 	}
@@ -136,4 +136,13 @@ func CreateGenesisBlock(n int, pubKey *rsa.PublicKey) *Block {
 	}
 	b.ComputeAndFillHash()
 	return b
+}
+
+func (b *Block) IsGenesis() bool {
+	return b.Nonce == "00" &&
+		string(b.PreviousHash) == "1" &&
+		len(b.Transactions) == 1 &&
+		b.Transactions[0].IsGenesis() &&
+		b.Index == 0 &&
+		b.Nonce == "00"
 }

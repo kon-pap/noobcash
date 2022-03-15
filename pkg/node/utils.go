@@ -28,12 +28,15 @@ func NewTxQueue() *TxQueue {
 	}
 }
 
+func (tq *TxQueue) enqueue(tx *bck.Transaction) {
+	tq.queue.PushBack(tx)
+}
+
 // Thread-safe enqueue
 func (tq *TxQueue) Enqueue(tx *bck.Transaction) {
 	tq.mu.Lock()
 	defer tq.mu.Unlock()
-
-	tq.queue.PushBack(tx)
+	tq.enqueue(tx)
 }
 
 // Thread-safe EnqueueMany
@@ -50,19 +53,22 @@ func (tq *TxQueue) EnqueueMany(txs []*bck.Transaction) {
 	tq.queue.PushBackList(extensionList)
 }
 
-// Thread-safe dequeue
-//
-// returns nil if queue is empty
-func (tq *TxQueue) Dequeue() *bck.Transaction {
-	tq.mu.Lock()
-	defer tq.mu.Unlock()
-
+func (tq *TxQueue) dequeue() *bck.Transaction {
 	e := tq.queue.Front()
 	if e == nil {
 		return nil
 	}
 	tq.queue.Remove(e)
 	return e.Value.(*bck.Transaction)
+}
+
+// Thread-safe dequeue
+//
+// returns nil if queue is empty
+func (tq *TxQueue) Dequeue() *bck.Transaction {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+	return tq.dequeue()
 }
 
 // Thread-safe DequeueMany
@@ -75,9 +81,9 @@ func (tq *TxQueue) DequeueMany(n int) []*bck.Transaction {
 	if tq.queue.Len() < n {
 		return nil
 	}
-	txs := make([]*bck.Transaction, n)
+	txs := make([]*bck.Transaction, 0, n)
 	for i := 0; i < n; i++ {
-		tx := tq.Dequeue()
+		tx := tq.dequeue()
 		if tx == nil {
 			panic("TxQueue.DequeueMany: tx == nil, but queue.Len() >= n")
 		}
