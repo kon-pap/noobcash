@@ -169,7 +169,6 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 
 }
 
-
 func (n *Node) LockTxParticipants(tx *bck.Transaction) func() {
 	myLockedPubKeys := make(stringSet)
 	if tx.SenderAddress != nil {
@@ -358,13 +357,16 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 	for {
 		select {
 		case minedBlock := <-n.minedBlockChan:
-			//TODO: handle minedBlock
+			// TODO: handle minedBlock
 			log.Println("Processing mined block...")
 			n.ApplyBlock(minedBlock)
+			// TODO: Probably just broadcast
 		case incomingBlock := <-n.incBlockChan:
-			//TODO: handle incomingBlock
+			// TODO: HANDLE INCOMINGBLOCK
+			// TODO: check validity, stop mining if currently mining, remove included txs from queue
+			// TODO: and accept it
 			log.Println("Processing received block...")
-			//TODO: Remove this fmt.Println (needed to look like it's being used)
+			// TODO: Remove this fmt.Println (needed to look like it's being used)
 			fmt.Println("Incoming block:", incomingBlock)
 		}
 	}
@@ -408,6 +410,7 @@ func (n *Node) DoInitialBootstrapActions() {
 	//*DONE(PAP): send genesis block and money spreading block(s)
 	//!NOTE: Normally mined blocks will be broadcast automatically in the future
 	//!NOTE:   so the money-spreading block may need to be "accepted" after genesis broadcast
+	// TODO: Money-spreading block can be submitted normaly
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
 
 	//*Wait/Poll omitted since it is started after N nodes have been registered
