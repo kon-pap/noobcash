@@ -360,6 +360,7 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 			// TODO: handle minedBlock
 			log.Println("Processing mined block...")
 			n.ApplyBlock(minedBlock)
+			n.BroadcastBlock(minedBlock)
 			// TODO: Probably just broadcast
 		case incomingBlock := <-n.incBlockChan:
 			// TODO: HANDLE INCOMINGBLOCK
@@ -410,7 +411,7 @@ func (n *Node) DoInitialBootstrapActions() {
 	//*DONE(PAP): send genesis block and money spreading block(s)
 	//!NOTE: Normally mined blocks will be broadcast automatically in the future
 	//!NOTE:   so the money-spreading block may need to be "accepted" after genesis broadcast
-	// TODO(PAP): Money-spreading block can be submitted normaly
+	//* DONE(PAP): Money-spreading block can be submitted normaly
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
 
 	//*Wait/Poll omitted since it is started after N nodes have been registered
@@ -429,9 +430,10 @@ func (n *Node) DoInitialBootstrapActions() {
 		os.Exit(1)
 	}
 	n.ApplyBlock(genBlock)
-	//*Wait/Poll omitted since we can apply genesis block (blocking-ly) without mining it
-
 	log.Println("Genesis is in the chain")
+
+	n.BroadcastBlock(genBlock)
+	log.Println("Genesis is broadcasted")
 
 	// Setting block capacity to 1
 	//! Works because we don't check block capacity in isValidBlock
@@ -468,20 +470,7 @@ func (n *Node) DoInitialBootstrapActions() {
 	// Resetting block capacity
 	bck.BlockCapacity = previousCapacity
 
-	sendContent, err := json.Marshal(n.Chain)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	replies, err := n.BroadcastByteSlice(sendContent, submitBlocksEndpoint)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	for _, reply := range replies {
-		log.Println("Fellow node replied:", reply)
-	}
-	log.Println("Sent chain to nodes. Game on!")
+	log.Println("Reset block capacity. Game on!")
 }
 
 func (n *Node) ConnectToBootstrapJob() {
