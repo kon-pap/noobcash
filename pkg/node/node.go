@@ -219,30 +219,29 @@ func (n *Node) HandleStopMining(incomingBlock, almostMinedBlock *bck.Block) {
 
 func (n *Node) MineBlock(block *bck.Block) {
 	//*DONE(ORF): CHANGE this to insert the nonce in the block and hash it again
+	if block.IsGenesis() {
+		panic("Node.MineBlock() called on genesis block")
+	}
 	log.Println("Mining block")
+	dif := strings.Repeat("0", bck.Difficulty)
 
-	// Skip mining genesis block
-	if !block.IsGenesis() {
-		dif := strings.Repeat("0", bck.Difficulty)
+	rand.Seed(time.Now().UnixNano())
+	nonce := make([]byte, 32)
 
-		rand.Seed(time.Now().UnixNano())
-		nonce := make([]byte, 32)
-
-		for {
-			//*DONE(ORF): Stop mining if a block is received
-			select {
-			case incomingBlock := <-n.stopMiningChan:
-				log.Println("Stopping mining...")
-				n.HandleStopMining(incomingBlock, block)
-				return
-			default: // used to prevent blocking
-			}
-			rand.Read(nonce[:])
-			block.Nonce = bck.HexEncodeByteSlice(nonce)
-			block.ComputeAndFillHash()
-			if strings.HasPrefix(bck.HexEncodeByteSlice(block.CurrentHash), dif) {
-				break
-			}
+	for {
+		//*DONE(ORF): Stop mining if a block is received
+		select {
+		case incomingBlock := <-n.stopMiningChan:
+			log.Println("Stopping mining...")
+			n.HandleStopMining(incomingBlock, block)
+			return
+		default: // used to prevent blocking
+		}
+		rand.Read(nonce[:])
+		block.Nonce = bck.HexEncodeByteSlice(nonce)
+		block.ComputeAndFillHash()
+		if strings.HasPrefix(bck.HexEncodeByteSlice(block.CurrentHash), dif) {
+			break
 		}
 	}
 	n.minedBlockChan <- block
@@ -354,6 +353,7 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 		case incomingBlock := <-n.incBlockChan:
 			//TODO: handle incomingBlock
 			log.Println("Processing received block...")
+			//TODO: Remove this fmt.Println (needed to look like it's being used)
 			fmt.Println("Incoming block:", incomingBlock)
 		}
 	}
@@ -395,6 +395,8 @@ func (n *Node) BroadcastRingInfo() error {
 func (n *Node) DoInitialBootstrapActions() {
 	//*DONE(PAP): Wait for N nodes, broadcast ring info, wait for N responses,
 	//*DONE(PAP): send genesis block and money spreading block(s)
+	//!NOTE: Normally mined blocks will be broadcast automatically in the future
+	//!NOTE:   so the money-spreading block may need to be "accepted" after genesis broadcast
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
 
 	//*Wait/Poll omitted since it is started after N nodes have been registered
@@ -452,29 +454,19 @@ func (n *Node) DoInitialBootstrapActions() {
 	// Resetting block capacity
 	bck.BlockCapacity = previousCapacity
 
-	for _, nInfo := range n.Ring {
-		if nInfo.Id != n.Id {
-			sendContent, err := json.Marshal(n.Chain)
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			sendBody := bytes.NewBuffer(sendContent)
-			body, err := GetResponseBody(
-				http.DefaultClient.Post(
-					fmt.Sprintf("http://%s:%s/submit-blocks", nInfo.Hostname, nInfo.Port),
-					"application/json",
-					sendBody,
-				),
-			)
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			log.Println(string(body))
-		}
+	sendContent, err := json.Marshal(n.Chain)
+	if err != nil {
+		log.Println(err)
+		return
 	}
-
+	replies, err := n.BroadcastByteSlice(sendContent, submitBlocksEndpoint)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	for _, reply := range replies {
+		log.Println("Fellow node replied:", reply)
+	}
 	log.Println("Sent chain to nodes. Game on!")
 }
 

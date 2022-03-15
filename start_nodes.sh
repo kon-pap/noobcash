@@ -41,5 +41,5 @@ for i in $(seq 0 $N); do
     CMD="$CMD $myCmd 2>&1 >/dev/null | sed -e $sedIdentifier"
 done
 # ps | grep noobcash-node | grep -v 'grep' | cut -d' ' -f2 | xargs kill
-trap "ps | grep noobcash-node | grep -v 'grep' | cut -d' ' -f1 | xargs kill" SIGINT
+trap "pgrep -f noobcash-node | xargs kill" SIGINT
 eval $CMD
