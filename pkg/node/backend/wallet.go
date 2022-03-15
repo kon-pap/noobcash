@@ -74,7 +74,6 @@ func (w *WalletInfo) MarshalJSON() ([]byte, error) {
 // Serialization and deserialization
 ////
 func (w *Wallet) MarshalJSON() ([]byte, error) {
-	// TODO: Implement using Marshaler  of utxo
 	return json.Marshal(w.GetWalletInfo())
 }
 

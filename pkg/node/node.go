@@ -191,7 +191,7 @@ func (n *Node) LockTxParticipants(tx *bck.Transaction) func() {
 	}
 }
 
-//TODO(BILL)
+//*DONE(BILL)
 func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 	txInSlice := []*bck.Transaction{tx}
 	dataInJSON, err := json.Marshal(txInSlice)
@@ -275,7 +275,7 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 	return nil
 }
 
-//TODO(BILL)
+//*DONE(BILL)
 func (n *Node) BroadcastBlock(block *bck.Block) error {
 	tmpBlock := []*bck.Block{block}
 	blockInJson, err := json.Marshal(tmpBlock)
@@ -336,7 +336,7 @@ func (n *Node) ConnectToBootstrap() error {
 
 func (n *Node) CheckTxQueueForMining() {
 	// return ticker if we need to stop the job sometime (make this into a jobfactory)
-	//TODO(ORF): Rethink interval of polling. Millisecond interval causes starvation
+	//*DONE(ORF): Rethink interval of polling. Millisecond interval causes starvation
 	//because DequeueMany uses the lock. I set it to time.Second to proceed
 	//If not starvation, some serious race condition is waiting us
 	ticker := time.NewTicker(time.Second * checkTxCountIntervalSeconds)
@@ -410,7 +410,7 @@ func (n *Node) DoInitialBootstrapActions() {
 	//*DONE(PAP): send genesis block and money spreading block(s)
 	//!NOTE: Normally mined blocks will be broadcast automatically in the future
 	//!NOTE:   so the money-spreading block may need to be "accepted" after genesis broadcast
-	// TODO: Money-spreading block can be submitted normaly
+	// TODO(PAP): Money-spreading block can be submitted normaly
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
 
 	//*Wait/Poll omitted since it is started after N nodes have been registered
