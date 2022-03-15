@@ -194,6 +194,7 @@ func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxO
 		for _, chosen := range previousTxOuts {
 			delete(w.Utxos, chosen.Id)
 		}
+		w.Balance -= sum
 	}
 	return
 }

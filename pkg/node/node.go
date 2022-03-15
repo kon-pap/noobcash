@@ -134,20 +134,21 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 
 	// Skip this if tx is the genesis transaction
 	if tx.SenderAddress != nil {
-		senderAddress = bck.PubKeyToPem(tx.SenderAddress)
-		senderWalletInfo = n.Ring[senderAddress].WInfo
-		thisIsSender := senderAddress == nodeAddress
+		stringSenderAddress := bck.PubKeyToPem(tx.SenderAddress)
+		senderWallet := n.Ring[stringSenderAddress].WInfo
+		// thisIsSender := stringSenderAddress == stringNodeAddress
 
 		for txInId := range tx.Inputs {
 			previousUtxo := senderWalletInfo.Utxos[string(txInId)]
 			senderWalletInfo.Balance -= previousUtxo.Amount
 			delete(senderWalletInfo.Utxos, string(txInId))
 
+			//!NOTE(ORF): This can be omitted since we called createTx and therefore utxos and balance are already adjusted
 			// if this wallet is the sender then update the private state as well
-			if thisIsSender {
-				n.Wallet.Balance -= previousUtxo.Amount
-				delete(n.Wallet.Utxos, string(txInId))
-			}
+			// if thisIsSender {
+			// 	n.Wallet.Balance -= previousUtxo.Amount
+			// 	delete(n.Wallet.Utxos, string(txInId))
+			// }
 		}
 	}
 
