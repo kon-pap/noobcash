@@ -92,6 +92,24 @@ func (tq *TxQueue) DequeueMany(n int) []*bck.Transaction {
 	return txs
 }
 
+func (tq *TxQueue) DequeueManyByValue(txIdsToLookFor stringSet) int {
+	var queueElemsToRemove []*list.Element
+
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+	for e := tq.queue.Front(); e != nil; e = e.Next() {
+		tx := e.Value.(*bck.Transaction)
+		if txIdsToLookFor.ContainsByteSlice(tx.Id) {
+			queueElemsToRemove = append(queueElemsToRemove, e)
+		}
+	}
+	removeCnt := len(queueElemsToRemove)
+	for _, elem := range queueElemsToRemove {
+		tq.queue.Remove(elem)
+	}
+	return removeCnt
+}
+
 func (tq *TxQueue) Len() int {
 	return tq.queue.Len()
 }
@@ -145,5 +163,13 @@ func (ss stringSet) Add(s string) {
 }
 func (ss stringSet) Contains(s string) bool {
 	_, ok := ss[s]
+	return ok
+}
+
+func (ss stringSet) AddByteSlice(b []byte) {
+	ss[bck.HexEncodeByteSlice(b)] = struct{}{}
+}
+func (ss stringSet) ContainsByteSlice(b []byte) bool {
+	_, ok := ss[bck.HexEncodeByteSlice(b)]
 	return ok
 }

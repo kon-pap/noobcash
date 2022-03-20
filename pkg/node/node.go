@@ -2,6 +2,7 @@ package node
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rsa"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
+	"golang.org/x/sync/semaphore"
 )
 
 const checkTxCountIntervalSeconds = 5
@@ -31,10 +33,11 @@ type Node struct {
 	pendingTxs     *TxQueue
 	incBlockChan   chan *bck.Block // send over the block received from the network
 	minedBlockChan chan *bck.Block // send over the block mined by this node
-	stopMiningChan chan *bck.Block // send over the block received to stop mining and handle leftover transactions
+	stopMiningChan chan struct{}   // send over the block received to stop mining and handle leftover transactions
 
-	muChainLock sync.Mutex // locks when altering the chain
-	muRingLock  sync.Mutex // locks to grab the specific nodeInfo locks without risking deadlocks
+	semaCurrentlyMining *semaphore.Weighted // semaphore supports TryAcquire()
+	muChainLock         sync.Mutex          // locks when altering the chain
+	muRingLock          sync.Mutex          // locks to grab the specific nodeInfo locks without risking deadlocks
 
 	info    *NodeInfo
 	apiport string
@@ -55,7 +58,9 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 		pendingTxs:     NewTxQueue(),
 		incBlockChan:   make(chan *bck.Block, 1),
 		minedBlockChan: make(chan *bck.Block, 1),
-		stopMiningChan: make(chan *bck.Block, 1),
+		stopMiningChan: make(chan struct{}, 1),
+
+		semaCurrentlyMining: semaphore.NewWeighted(1),
 
 		info:    newNodeInfo,
 		apiport: apiport,
@@ -136,19 +141,11 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 	if tx.SenderAddress != nil {
 		senderAddress = bck.PubKeyToPem(tx.SenderAddress)
 		senderWalletInfo = n.Ring[senderAddress].WInfo
-		// thisIsSender := stringSenderAddress == stringNodeAddress
 
 		for txInId := range tx.Inputs {
 			previousUtxo := senderWalletInfo.Utxos[string(txInId)]
 			senderWalletInfo.Balance -= previousUtxo.Amount
 			delete(senderWalletInfo.Utxos, string(txInId))
-
-			//!NOTE(ORF): This can be omitted since we called createTx and therefore utxos and balance are already adjusted
-			// if this wallet is the sender then update the private state as well
-			// if thisIsSender {
-			// 	n.Wallet.Balance -= previousUtxo.Amount
-			// 	delete(n.Wallet.Utxos, string(txInId))
-			// }
 		}
 	}
 
@@ -218,17 +215,25 @@ func (n *Node) IsValidBlock(block *bck.Block) bool {
 		bck.HexEncodeByteSlice(block.ComputeHash()) == thisBlockHash // this block's hash is correct
 }
 
-func (n *Node) HandleStopMining(incomingBlock, almostMinedBlock *bck.Block) {
-	//TODO(ORF): Compare incomingBlock's and almostMinedBlock's transactions, and
-	//TODO(ORF): and call enqueueMany for any that were not in incomingBlock
+func (n *Node) CancelBlock(block *bck.Block) {
+	n.pendingTxs.EnqueueMany(block.Transactions)
 }
 
+// Should be usually called as a goroutine.
 func (n *Node) MineBlock(block *bck.Block) {
-	//*DONE(ORF): CHANGE this to insert the nonce in the block and hash it again
+	// TODO(PAP): use two locks, one shared with checkTxQueue and one shared with SelectMinedOrIncoming
 	if block.IsGenesis() {
 		panic("Node.MineBlock() called on genesis block")
 	}
 	log.Println("Mining block")
+
+	//!NOTE(ORF): Only other possible holder is the block receiver, in which case we should reset mining
+	if !n.semaCurrentlyMining.TryAcquire(1) {
+		n.CancelBlock(block)
+		return
+	}
+	defer n.semaCurrentlyMining.Release(1)
+
 	dif := strings.Repeat("0", bck.Difficulty)
 
 	rand.Seed(time.Now().UnixNano())
@@ -236,10 +241,11 @@ func (n *Node) MineBlock(block *bck.Block) {
 
 	for {
 		//*DONE(ORF): Stop mining if a block is received
+		//!NOTE(ORF): May need some more care
 		select {
-		case incomingBlock := <-n.stopMiningChan:
+		case <-n.stopMiningChan:
 			log.Println("Stopping mining...")
-			n.HandleStopMining(incomingBlock, block)
+			n.CancelBlock(block)
 			return
 		default: // used to prevent blocking
 		}
@@ -300,7 +306,10 @@ func (n *Node) IsValidChain() bool {
 */
 
 /*
-//TODO: Throw away transactions that were submitted in the incoming block.
+//TODO: use RemoveCompletedTxsFromQueue (somewhere)
+
+//TODO(ORF): Endpoint for requesting n blocks (possibly whole chain)
+//TODO(ORF): Endpoint for requesting chain size
 func (n *Node) ResolveConflict(block *bck.Block) error {
 }
 */
@@ -335,18 +344,32 @@ func (n *Node) ConnectToBootstrap() error {
 }
 
 func (n *Node) CheckTxQueueForMining() {
-	// return ticker if we need to stop the job sometime (make this into a jobfactory)
-	//*DONE(ORF): Rethink interval of polling. Millisecond interval causes starvation
-	//because DequeueMany uses the lock. I set it to time.Second to proceed
-	//If not starvation, some serious race condition is waiting us
 	ticker := time.NewTicker(time.Second * checkTxCountIntervalSeconds)
 	for range ticker.C {
+		// TODO(BIL): Either gradually decrease the required number of txs
+		// TODO(BIL): or split txouts during transaction creation
+		// TODO(BIL): or both
+		if !n.semaCurrentlyMining.TryAcquire(1) {
+			continue
+		}
 		if txs := n.pendingTxs.DequeueMany(bck.BlockCapacity); txs != nil {
 			newBlock := bck.NewBlock(n.getLastBlock().CurrentHash)
 			newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
+			n.semaCurrentlyMining.Release(1)
 			go n.MineBlock(newBlock)
+			continue
 		}
+		n.semaCurrentlyMining.Release(1)
 	}
+}
+
+// Restore any txs from almostAcceptedBlock that are not in incomingBlock
+func (n *Node) RemoveCompletedTxsFromQueue(incomingBlock *bck.Block) {
+	txIdsToLookFor := make(stringSet)
+	for _, tx := range incomingBlock.Transactions {
+		txIdsToLookFor.AddByteSlice(tx.Id)
+	}
+	n.pendingTxs.DequeueManyByValue(txIdsToLookFor)
 }
 
 // Listens for incoming or mined blocks
@@ -357,18 +380,23 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 	for {
 		select {
 		case minedBlock := <-n.minedBlockChan:
-			// TODO: handle minedBlock
 			log.Println("Processing mined block...")
 			n.ApplyBlock(minedBlock)
 			n.BroadcastBlock(minedBlock)
-			// TODO: Probably just broadcast
 		case incomingBlock := <-n.incBlockChan:
-			// TODO: HANDLE INCOMINGBLOCK
-			// TODO: check validity, stop mining if currently mining, remove included txs from queue
-			// TODO: and accept it
 			log.Println("Processing received block...")
-			// TODO: Remove this fmt.Println (needed to look like it's being used)
-			fmt.Println("Incoming block:", incomingBlock)
+			if !n.IsValidBlock(incomingBlock) {
+				//!NOTE: handle conflict in applyBlock
+			} else {
+				if !n.semaCurrentlyMining.TryAcquire(1) { // means it was mining
+					n.stopMiningChan <- struct{}{}
+					n.semaCurrentlyMining.Acquire(context.Background(), 1) // block until mining has stopped
+				}
+				//!NOTE(ORF): Here one way or another we hold the semaphore
+				n.ApplyBlock(incomingBlock)
+				n.RemoveCompletedTxsFromQueue(incomingBlock)
+				n.semaCurrentlyMining.Release(1)
+			}
 		}
 	}
 }
@@ -414,8 +442,6 @@ func (n *Node) DoInitialBootstrapActions() {
 	//* DONE(PAP): Money-spreading block can be submitted normaly
 	log.Printf("Starting setup process for %d nodes\n", n.nodecnt)
 
-	//*Wait/Poll omitted since it is started after N nodes have been registered
-
 	// Broadcast Ring info
 	err := n.BroadcastRingInfo()
 	if err != nil {
@@ -460,13 +486,11 @@ func (n *Node) DoInitialBootstrapActions() {
 		log.Println(err)
 		os.Exit(1)
 	}
+	// poll until the money-spreading block is on-chain
 	for len(n.Chain) == 1 {
-		// Sleep for 3 seconds to avoid excessive polling
 		time.Sleep(time.Second)
 	}
-
 	log.Println("Created initial transactions and added to the chain")
-
 	// Resetting block capacity
 	bck.BlockCapacity = previousCapacity
 
