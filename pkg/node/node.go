@@ -221,6 +221,7 @@ func (n *Node) CancelBlock(block *bck.Block) {
 
 // Should be usually called as a goroutine.
 func (n *Node) MineBlock(block *bck.Block) {
+	// TODO(PAP): use two locks, one shared with checkTxQueue and one shared with SelectMinedOrIncoming
 	if block.IsGenesis() {
 		panic("Node.MineBlock() called on genesis block")
 	}
@@ -305,7 +306,10 @@ func (n *Node) IsValidChain() bool {
 */
 
 /*
-//TODO: Throw away transactions that were submitted in the incoming block.
+//TODO: use RemoveCompletedTxsFromQueue (somewhere)
+
+//TODO(ORF): Endpoint for requesting n blocks (possibly whole chain)
+//TODO(ORF): Endpoint for requesting chain size
 func (n *Node) ResolveConflict(block *bck.Block) error {
 }
 */
@@ -342,7 +346,9 @@ func (n *Node) ConnectToBootstrap() error {
 func (n *Node) CheckTxQueueForMining() {
 	ticker := time.NewTicker(time.Second * checkTxCountIntervalSeconds)
 	for range ticker.C {
-		//*DONE(ORF): Don't send a block to the miner if the miner is already mining
+		// TODO(BIL): Either gradually decrease the required number of txs
+		// TODO(BIL): or split txouts during transaction creation
+		// TODO(BIL): or both
 		if !n.semaCurrentlyMining.TryAcquire(1) {
 			continue
 		}
@@ -380,7 +386,7 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 		case incomingBlock := <-n.incBlockChan:
 			log.Println("Processing received block...")
 			if !n.IsValidBlock(incomingBlock) {
-				// TODO: Handle conflict
+				//!NOTE: handle conflict in applyBlock
 			} else {
 				if !n.semaCurrentlyMining.TryAcquire(1) { // means it was mining
 					n.stopMiningChan <- struct{}{}
