@@ -146,15 +146,22 @@ func (n *Node) createChainTailHandler() http.HandlerFunc {
 			http.Error(w, "Chain is empty", http.StatusBadRequest)
 			return
 		}
-		requestedLen, err := strconv.Atoi(mux.Vars(r)["length"])
-		if err != nil {
-			http.Error(w, "Length could not be parsed", http.StatusBadRequest)
-			return
+		var chainToSend []*bck.Block
+		params := mux.Vars(r)
+		requestedLenRaw := params["length"]
+		if requestedLenRaw == "-1" {
+			chainToSend = n.Chain
+		} else {
+			requestedLen, err := strconv.Atoi(requestedLenRaw)
+			if err != nil {
+				http.Error(w, "Length could not be parsed", http.StatusBadRequest)
+				return
+			}
+			if requestedLen > len(n.Chain) {
+				requestedLen = len(n.Chain)
+			}
+			chainToSend = n.Chain[len(n.Chain)-requestedLen:]
 		}
-		if requestedLen > len(n.Chain) {
-			requestedLen = len(n.Chain)
-		}
-		chainToSend := n.Chain[len(n.Chain)-requestedLen:]
 		json.NewEncoder(w).Encode(chainToSend)
 	}
 }
