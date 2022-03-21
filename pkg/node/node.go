@@ -35,9 +35,10 @@ type Node struct {
 	minedBlockChan chan *bck.Block // send over the block mined by this node
 	stopMiningChan chan struct{}   // send over the block received to stop mining and handle leftover transactions
 
-	semaCurrentlyMining *semaphore.Weighted // semaphore supports TryAcquire()
-	muChainLock         sync.Mutex          // locks when altering the chain
-	muRingLock          sync.Mutex          // locks to grab the specific nodeInfo locks without risking deadlocks
+	semaCurrentlyMining    *semaphore.Weighted // semaphore supports TryAcquire()
+	semaCurrentlyMiningInc *semaphore.Weighted
+	muChainLock            sync.Mutex // locks when altering the chain
+	muRingLock             sync.Mutex // locks to grab the specific nodeInfo locks without risking deadlocks
 
 	info    *NodeInfo
 	apiport string
@@ -60,7 +61,8 @@ func NewNode(currBlockId, bits int, ip, port, apiport string) *Node {
 		minedBlockChan: make(chan *bck.Block, 1),
 		stopMiningChan: make(chan struct{}, 1),
 
-		semaCurrentlyMining: semaphore.NewWeighted(1),
+		semaCurrentlyMining:    semaphore.NewWeighted(1),
+		semaCurrentlyMiningInc: semaphore.NewWeighted(1),
 
 		info:    newNodeInfo,
 		apiport: apiport,
@@ -221,18 +223,26 @@ func (n *Node) CancelBlock(block *bck.Block) {
 
 // Should be usually called as a goroutine.
 func (n *Node) MineBlock(block *bck.Block) {
-	// TODO(PAP): use two locks, one shared with checkTxQueue and one shared with SelectMinedOrIncoming
+	//*DONE(PAP): use two locks, one shared with checkTxQueue and one shared with SelectMinedOrIncoming
 	if block.IsGenesis() {
 		panic("Node.MineBlock() called on genesis block")
 	}
 	log.Println("Mining block")
 
-	//!NOTE(ORF): Only other possible holder is the block receiver, in which case we should reset mining
-	if !n.semaCurrentlyMining.TryAcquire(1) {
+	//!NOTE Block till you get the lock that allows you to mine
+	//!NOTE No other block is being mined
+	//!NOTE No new block is being created. Possible if CheckTxQueueForMining enough pendingTxs &
+	//!NOTE for a random reason gets the lock first
+	n.semaCurrentlyMining.Acquire(context.Background(), 1)
+	defer n.semaCurrentlyMining.Release(1)
+
+	//!NOTE semaCurrentlyMiningInc can only be taken by incomingBlock that gets applied
+	//!NOTE In this case the already mined block has higher priority so we cancel mining
+	if !n.semaCurrentlyMiningInc.TryAcquire(1) {
 		n.CancelBlock(block)
 		return
 	}
-	defer n.semaCurrentlyMining.Release(1)
+	defer n.semaCurrentlyMiningInc.Release(1)
 
 	dif := strings.Repeat("0", bck.Difficulty)
 
@@ -388,14 +398,14 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 			if !n.IsValidBlock(incomingBlock) {
 				//!NOTE: handle conflict in applyBlock
 			} else {
-				if !n.semaCurrentlyMining.TryAcquire(1) { // means it was mining
+				if !n.semaCurrentlyMiningInc.TryAcquire(1) { // means it was mining
 					n.stopMiningChan <- struct{}{}
-					n.semaCurrentlyMining.Acquire(context.Background(), 1) // block until mining has stopped
+					n.semaCurrentlyMiningInc.Acquire(context.Background(), 1) // block until mining has stopped
 				}
 				//!NOTE(ORF): Here one way or another we hold the semaphore
 				n.ApplyBlock(incomingBlock)
 				n.RemoveCompletedTxsFromQueue(incomingBlock)
-				n.semaCurrentlyMining.Release(1)
+				n.semaCurrentlyMiningInc.Release(1)
 			}
 		}
 	}
