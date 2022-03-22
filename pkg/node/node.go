@@ -348,17 +348,6 @@ func (n *Node) CheckTxQueueForMining() {
 	capacity := bck.BlockCapacity
 	chain := len(n.Chain)
 	for range ticker.C {
-		// TODO(BIL): Either gradually decrease the required number of txs
-		if capacity > 0 {
-			capacity--
-		} else {
-			log.Printf("Tried to decrease capacity below zero")
-			//maybe this is an edge case and will never have such a problem
-			//if there is a constant problem here we must increase checkTxCountIntervalSeconds
-		}
-		if len(n.Chain) > chain {
-			capacity = bck.BlockCapacity //reset the block capacity if one or more blocks applied
-		}
 		// TODO(BIL): or split txouts during transaction creation
 		//split bigger amounts in smaller i.e 100 -> 20, 20, 20, 20, 10, 5, 5
 		// TODO(BIL): or both
@@ -371,6 +360,18 @@ func (n *Node) CheckTxQueueForMining() {
 			n.semaCurrentlyMining.Release(1)
 			go n.MineBlock(newBlock)
 			continue
+		} else {
+			// TODO(BIL): Either gradually decrease the required number of txs
+			if capacity > 0 {
+				capacity--
+			} else {
+				log.Printf("Tried to decrease capacity below zero")
+				//maybe this is an edge case and will never have such a problem
+				//if there is a constant problem here we must increase checkTxCountIntervalSeconds
+			}
+			if len(n.Chain) > chain {
+				capacity = bck.BlockCapacity //reset the block capacity if one or more blocks applied
+			}
 		}
 		n.semaCurrentlyMining.Release(1)
 	}
