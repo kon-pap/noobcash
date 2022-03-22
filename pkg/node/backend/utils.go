@@ -32,3 +32,28 @@ func (set InputSetTy) Has(inputId string) bool {
 func (set InputSetTy) Remove(inputId string) {
 	delete(set, InputId(inputId))
 }
+
+func SplitAmount(amount int, pieces int) (split []int) {
+
+	if amount < pieces {
+		//err = fmt.Errorf("can't split %d in %d pieces ", amount, pieces)
+		//!NOTE: Might have to return the amount as is
+		split = append(split, amount)
+		return
+	} else if amount%pieces == 0 {
+		for i := 0; i < pieces; i++ {
+			split = append(split, amount/pieces)
+		}
+	} else {
+		a := pieces - (amount % pieces)
+		b := amount / pieces
+		for i := 0; i < pieces; i++ {
+			if i >= a {
+				split = append(split, b+1)
+			} else {
+				split = append(split, b)
+			}
+		}
+	}
+	return
+}

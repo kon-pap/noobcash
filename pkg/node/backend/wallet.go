@@ -14,6 +14,8 @@ import (
 	"sort"
 )
 
+const numberOfPieces = 5
+
 type Wallet struct {
 	Balance int
 	PrivKey *rsa.PrivateKey
@@ -215,16 +217,22 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 	for _, txOut := range previousTxOuts {
 		tx.Inputs.Add(txOut.Id)
 	}
-
-	targetTxOut := NewTxOut(address, amount)
-	targetTxOut.ComputeAndFillHash()
-	tx.Outputs[targetTxOut.Id] = targetTxOut
+	splitedAmount := SplitAmount(amount, numberOfPieces)
+	for _, splAmount := range splitedAmount {
+		targetTxOut := NewTxOut(address, splAmount)
+		targetTxOut.ComputeAndFillHash()
+		tx.Outputs[targetTxOut.Id] = targetTxOut
+	}
 
 	changeAmount := sum - amount
 	if changeAmount > 0 { // if change exists
-		changeTxOut := NewTxOut(&w.PrivKey.PublicKey, changeAmount)
-		changeTxOut.ComputeAndFillHash()
-		tx.Outputs[changeTxOut.Id] = changeTxOut
+		splitChange := SplitAmount(changeAmount, numberOfPieces)
+		for _, change := range splitChange {
+			changeTxOut := NewTxOut(&w.PrivKey.PublicKey, change)
+			changeTxOut.ComputeAndFillHash()
+			tx.Outputs[changeTxOut.Id] = changeTxOut
+		}
+
 	}
 
 	tx.ComputeAndFillHash()
