@@ -42,7 +42,7 @@ func (n *Node) SendByteSlice(data []byte, hostname, port string, endpoint endpoi
 
 func (n *Node) BroadcastByteSlice(data []byte, endpoint endpointTy) ([]string, error) {
 	log.Println("Broadcasting to", endpoint)
-	replies := make([]string, 0, len(n.Ring))
+	replies := make([]string, len(n.Ring))
 	for _, node := range n.Ring {
 		if node.Id == n.Id {
 			continue
@@ -51,7 +51,7 @@ func (n *Node) BroadcastByteSlice(data []byte, endpoint endpointTy) ([]string, e
 		if err != nil {
 			return nil, err
 		}
-		replies = append(replies, reply)
+		replies[node.Id] = reply
 	}
 	return replies, nil
 }

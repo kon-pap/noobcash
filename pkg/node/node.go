@@ -429,7 +429,10 @@ func (n *Node) BroadcastRingInfo() error {
 	if err != nil {
 		return err
 	}
-	for _, reply := range replies {
+	for id, reply := range replies {
+		if id == n.Id {
+			continue
+		}
 		regCnt, err := strconv.Atoi(strings.Split(reply, " ")[1])
 		if err != nil {
 			return err

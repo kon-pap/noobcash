@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	bck "github.com/kon-pap/noobcash/pkg/node/backend"
@@ -17,6 +18,8 @@ const (
 	submitBlocksEndpoint  = endpointTy("/submit-blocks")
 	submitTxsEndpoint     = endpointTy("/submit-txs")
 	bootstrapNodeEndpoint = endpointTy("/bootstrap-node")
+	chainLengthEndpoint   = endpointTy("/chain-length")
+	chainTailEndpoint     = endpointTy("/chain-tail/{length}")
 )
 
 func (n *Node) setupNodeHandler() *mux.Router {
@@ -27,6 +30,11 @@ func (n *Node) setupNodeHandler() *mux.Router {
 	r.HandleFunc(string(submitBlocksEndpoint), n.createSubmitBlocksHandler()).Methods("POST")
 	// Accepts a list of transactions to try and insert into blocks
 	r.HandleFunc(string(submitTxsEndpoint), n.createSubmitTxsHandler()).Methods("POST")
+	// Replies with the current chain length
+	r.HandleFunc(string(chainLengthEndpoint), n.createChainLengthHandler()).Methods("GET")
+	// Replies with the current chain tail
+	r.HandleFunc(string(chainTailEndpoint), n.createChainTailHandler()).Methods("GET")
+
 	if n.IsBootstrap() { // only bootstrap node can register new nodes
 		r.HandleFunc(string(bootstrapNodeEndpoint), n.createBootstrapNodeHandler()).Methods("POST")
 	}
@@ -121,6 +129,40 @@ func (n *Node) createSubmitTxsHandler() http.HandlerFunc {
 			}
 		}
 		fmt.Fprintf(w, "Accepted %d transaction(s)", len(txs))
+	}
+}
+
+func (n *Node) createChainLengthHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		//!NOTE: n.muChainLock ignored (good or bad ?)
+		fmt.Fprintf(w, "%d", len(n.Chain))
+	}
+}
+
+func (n *Node) createChainTailHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		//!NOTE: n.muChainLock ignored (good or bad ?)
+		if len(n.Chain) == 0 {
+			http.Error(w, "Chain is empty", http.StatusBadRequest)
+			return
+		}
+		var chainToSend []*bck.Block
+		params := mux.Vars(r)
+		requestedLenRaw := params["length"]
+		if requestedLenRaw == "-1" {
+			chainToSend = n.Chain
+		} else {
+			requestedLen, err := strconv.Atoi(requestedLenRaw)
+			if err != nil {
+				http.Error(w, "Length could not be parsed", http.StatusBadRequest)
+				return
+			}
+			if requestedLen > len(n.Chain) {
+				requestedLen = len(n.Chain)
+			}
+			chainToSend = n.Chain[len(n.Chain)-requestedLen:]
+		}
+		json.NewEncoder(w).Encode(chainToSend)
 	}
 }
 
