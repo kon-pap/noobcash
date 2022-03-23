@@ -14,7 +14,7 @@ import (
 	"sort"
 )
 
-const numberOfPieces = 5
+//const numberOfPieces = 5
 
 type Wallet struct {
 	Balance int
@@ -217,7 +217,7 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 	for _, txOut := range previousTxOuts {
 		tx.Inputs.Add(txOut.Id)
 	}
-	splitedAmount := SplitAmount(amount, numberOfPieces)
+	splitedAmount := Splitter(amount)
 	for _, splAmount := range splitedAmount {
 		targetTxOut := NewTxOut(address, splAmount)
 		targetTxOut.ComputeAndFillHash()
@@ -226,7 +226,7 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 
 	changeAmount := sum - amount
 	if changeAmount > 0 { // if change exists
-		splitChange := SplitAmount(changeAmount, numberOfPieces)
+		splitChange := Splitter(changeAmount)
 		for _, change := range splitChange {
 			changeTxOut := NewTxOut(&w.PrivKey.PublicKey, change)
 			changeTxOut.ComputeAndFillHash()
@@ -266,14 +266,20 @@ func (w *Wallet) CreateMultiTargetTx(targets ...*TxTargetTy) (*Transaction, erro
 	}
 	changeAmount := sum - totalAmount
 	for _, target := range targets {
-		targetTxOut := NewTxOut(target.Address, target.Amount)
-		targetTxOut.ComputeAndFillHash()
-		tx.Outputs[targetTxOut.Id] = targetTxOut
+		amountSplited := Splitter(target.Amount)
+		for _, amount := range amountSplited {
+			targetTxOut := NewTxOut(target.Address, amount)
+			targetTxOut.ComputeAndFillHash()
+			tx.Outputs[targetTxOut.Id] = targetTxOut
+		}
 	}
 	if changeAmount > 0 {
-		changeTxOut := NewTxOut(&w.PrivKey.PublicKey, changeAmount)
-		changeTxOut.ComputeAndFillHash()
-		tx.Outputs[changeTxOut.Id] = changeTxOut
+		changeSplit := Splitter(changeAmount)
+		for _, change := range changeSplit {
+			changeTxOut := NewTxOut(&w.PrivKey.PublicKey, change)
+			changeTxOut.ComputeAndFillHash()
+			tx.Outputs[changeTxOut.Id] = changeTxOut
+		}
 	}
 	tx.ComputeAndFillHash()
 	return tx, nil

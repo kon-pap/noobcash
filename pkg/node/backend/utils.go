@@ -57,3 +57,21 @@ func SplitAmount(amount int, pieces int) (split []int) {
 	}
 	return
 }
+
+func Splitter(amount int) (split []int) {
+	switch {
+	case amount < 10:
+		split = SplitAmount(amount, 1)
+	case amount >= 10 && amount < 20:
+		split = SplitAmount(amount, 2)
+	case amount >= 20 && amount < 70:
+		split = SplitAmount(amount, 3)
+	case amount >= 70 && amount < 100:
+		split = SplitAmount(amount, 4)
+	default:
+		split = SplitAmount(amount, 10)
+
+	}
+	return
+
+}
