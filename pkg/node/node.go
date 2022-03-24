@@ -325,6 +325,10 @@ func (n *Node) ResolveConflict(block *bck.Block) error {
 	responses, _ := n.BroadcastByteSlice([]byte{}, chainLengthEndpoint)
 
 	for id, res := range responses {
+		if id == n.Id {
+			continue
+		}
+
 		len, err := strconv.Atoi(string(res))
 		if err != nil {
 			return err

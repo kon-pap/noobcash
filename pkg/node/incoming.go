@@ -31,9 +31,9 @@ func (n *Node) setupNodeHandler() *mux.Router {
 	// Accepts a list of transactions to try and insert into blocks
 	r.HandleFunc(string(submitTxsEndpoint), n.createSubmitTxsHandler()).Methods("POST")
 	// Replies with the current chain length
-	r.HandleFunc(string(chainLengthEndpoint), n.createChainLengthHandler()).Methods("GET")
+	r.HandleFunc(string(chainLengthEndpoint), n.createChainLengthHandler()).Methods("POST")
 	// Replies with the current chain tail
-	r.HandleFunc(string(chainTailEndpoint), n.createChainTailHandler()).Methods("GET")
+	r.HandleFunc(string(chainTailEndpoint), n.createChainTailHandler()).Methods("POST")
 
 	if n.IsBootstrap() { // only bootstrap node can register new nodes
 		r.HandleFunc(string(bootstrapNodeEndpoint), n.createBootstrapNodeHandler()).Methods("POST")
