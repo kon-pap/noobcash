@@ -366,19 +366,18 @@ func (n *Node) CheckTxQueueForMining() {
 		if !n.semaCurrentlyMining.TryAcquire(1) {
 			continue
 		}
-		if txs := n.pendingTxs.DequeueMany(bck.BlockCapacity); txs != nil {
+		if txs := n.pendingTxs.DequeueMany(capacity); txs != nil {
 			newBlock := bck.NewBlock(n.getLastBlock().CurrentHash)
 			newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
 			n.semaCurrentlyMining.Release(1)
 			go n.MineBlock(newBlock)
 			wait = 0
 			continue
-		} else if wait == 5 {
-			//wait 5 times before decreasing the number of txs.
-			//5 is arbitrary
+		} else if wait == 3 {
 			//* DONE(BIL): Either gradually decrease the required number of txs
 			if capacity > 1 {
 				capacity--
+				log.Println("Temporarily decreasing block capacity to: ", capacity)
 			}
 			if len(n.Chain) > chain {
 				capacity = bck.BlockCapacity //reset the block capacity if one or more blocks applied

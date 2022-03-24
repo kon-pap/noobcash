@@ -2,6 +2,7 @@ package node
 
 import (
 	"container/list"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"sync"
@@ -124,6 +125,9 @@ func GetResponseBody(resp *http.Response, err error) (string, error) {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Error %d, with body '%s'", resp.StatusCode, string(body))
 	}
 	return string(body), nil
 }

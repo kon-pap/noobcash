@@ -67,8 +67,6 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 			http.Error(w, errMsg, http.StatusBadRequest)
 			return
 		}
-		fmt.Fprintf(w, "Submitting transaction to node %d for %d\n", tx.Recipient, tx.Amount)
-		//* DONE(PAP): CreateTx, SignTx, AcceptTx, BcastTx
 		var address *rsa.PublicKey
 		for _, nInfo := range n.Ring {
 			if nInfo.Id == tx.Recipient {
@@ -79,6 +77,7 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 		createdTx, err := n.Wallet.CreateAndSignTx(tx.Amount, address)
 		if err != nil {
 			errMsg := fmt.Sprintf("Creating transaction error: %s", err.Error())
+			log.Println(errMsg)
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
@@ -86,6 +85,7 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 		err = n.AcceptTx(createdTx)
 		if err != nil {
 			errMsg := fmt.Sprintf("Accepting transaction error: %s", err.Error())
+			log.Println(errMsg)
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
@@ -93,8 +93,10 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 		err = n.BroadcastTx(createdTx)
 		if err != nil {
 			errMsg := fmt.Sprintf("Broadcasting transaction error: %s", err.Error())
+			log.Println(errMsg)
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
+		fmt.Fprintf(w, "Submitted transaction to node %d for %d", tx.Recipient, tx.Amount)
 	}
 }
