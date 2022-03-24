@@ -61,7 +61,7 @@ func SplitAmount(amount int, pieces int) (split []int) {
 func Splitter(amount int) (split []int) {
 	switch {
 	case amount < 10:
-		split = SplitAmount(amount, 1)
+		split = append(split, amount)
 	case amount >= 10 && amount < 20:
 		split = SplitAmount(amount, 2)
 	case amount >= 20 && amount < 70:
