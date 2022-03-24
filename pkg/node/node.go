@@ -315,14 +315,58 @@ func (n *Node) IsValidChain() bool {
 }
 */
 
-/*
 //TODO: use RemoveCompletedTxsFromQueue (somewhere)
-
 //* DONE(ORF): Endpoint for requesting n blocks (possibly whole chain)
 //* DONE(ORF): Endpoint for requesting chain size
 func (n *Node) ResolveConflict(block *bck.Block) error {
+	max_len := len(n.Chain)
+	max_id := n.Id
+
+	responses, _ := n.BroadcastByteSlice([]byte{}, chainLengthEndpoint)
+
+	for id, res := range responses {
+		len, err := strconv.Atoi(string(res))
+		if err != nil {
+			return err
+		}
+
+		if len > max_len {
+			max_len = len
+			max_id = id
+		} else if len == max_len && id > max_id {
+			max_id = id
+
+		}
+	}
+
+	if max_id == n.Id {
+		return nil
+	}
+
+	for _, nInfo := range n.Ring {
+		if nInfo.Id == max_id {
+			endpoint := fmt.Sprintf("/chain-tail/%d", max_len-len(n.Chain)+1)
+			res, err := n.SendByteSlice([]byte{}, nInfo.Hostname, nInfo.Port, endpointTy(endpoint))
+			if err != nil {
+				return err
+			}
+
+			var blocks []*bck.Block
+			err = json.Unmarshal([]byte(res), &blocks)
+			if err != nil {
+				return err
+			}
+
+			// TODO: Replace last Block of the chain and replace it with blocks
+			//! Note: It assumes that the block before the one we remove is correct.
+			//! Note: Esentially assume max 1 block branches
+			break
+		}
+	}
+
+	return nil
+
 }
-*/
 
 //* RING
 func (n *Node) ConnectToBootstrap() error {
@@ -414,6 +458,9 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 			log.Println("Processing received block...")
 			if !n.IsValidBlock(incomingBlock) {
 				//!NOTE: handle conflict in applyBlock
+				//!NOTE: Lock the chain? Stop accepting incoming blocks? Minimg?
+				//!NOTE: DO we need incomingBlock as argument?
+				n.ResolveConflict(incomingBlock)
 			} else {
 				if !n.semaCurrentlyMiningInc.TryAcquire(1) { // means it was mining
 					n.stopMiningChan <- struct{}{}
