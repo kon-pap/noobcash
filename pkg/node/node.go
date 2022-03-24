@@ -318,8 +318,8 @@ func (n *Node) IsValidChain() bool {
 /*
 //TODO: use RemoveCompletedTxsFromQueue (somewhere)
 
-//TODO(ORF): Endpoint for requesting n blocks (possibly whole chain)
-//TODO(ORF): Endpoint for requesting chain size
+//* DONE(ORF): Endpoint for requesting n blocks (possibly whole chain)
+//* DONE(ORF): Endpoint for requesting chain size
 func (n *Node) ResolveConflict(block *bck.Block) error {
 }
 */
@@ -360,9 +360,9 @@ func (n *Node) CheckTxQueueForMining() {
 	wait := 0
 	for range ticker.C {
 		wait++
-		// TODO(BIL): or split txouts during transaction creation
+		//* DONE(BIL): or split txouts during transaction creation
 		//split bigger amounts in smaller i.e 100 -> 20, 20, 20, 20, 10, 5, 5
-		// TODO(BIL): or both
+		//* DONE(BIL): or both
 		if !n.semaCurrentlyMining.TryAcquire(1) {
 			continue
 		}
@@ -376,7 +376,7 @@ func (n *Node) CheckTxQueueForMining() {
 		} else if wait == 5 {
 			//wait 5 times before decreasing the number of txs.
 			//5 is arbitrary
-			// TODO(BIL): Either gradually decrease the required number of txs
+			//* DONE(BIL): Either gradually decrease the required number of txs
 			if capacity > 1 {
 				capacity--
 			}
