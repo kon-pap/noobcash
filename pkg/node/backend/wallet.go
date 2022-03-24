@@ -206,6 +206,7 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 		return nil, fmt.Errorf("tried to create transaction for %d", amount)
 	}
 	if amount > w.Balance {
+		//!NOTE: MAybe here we must wait until amount <= w.balance
 		return nil, fmt.Errorf("tried to create transaction for %d but only have %d", amount, w.Balance)
 	}
 	tx := NewTransaction(&w.PrivKey.PublicKey, amount)
@@ -254,6 +255,7 @@ func (w *Wallet) CreateMultiTargetTx(targets ...*TxTargetTy) (*Transaction, erro
 		return nil, fmt.Errorf("tried to create transaction for %d", totalAmount)
 	}
 	if totalAmount > w.Balance {
+		//!NOTE: MAybe here we must wait until amount <= w.balance
 		return nil, fmt.Errorf("tried to create transaction for %d but only have %d", totalAmount, w.Balance)
 	}
 	tx := NewTransaction(&w.PrivKey.PublicKey, totalAmount)

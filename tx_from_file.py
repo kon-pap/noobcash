@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import sys
 
@@ -9,4 +11,3 @@ if __name__ == "__main__":
         for line in txs:
             recipient, amount = line.split()
             os.system('./bin/noobcash-cli t {} {}'.format(recipient, amount))
-    file.close()

@@ -67,7 +67,7 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 			http.Error(w, errMsg, http.StatusBadRequest)
 			return
 		}
-		fmt.Fprintf(w, "Submitting transaction to node %d for %d", tx.Recipient, tx.Amount)
+		fmt.Fprintf(w, "Submitting transaction to node %d for %d\n", tx.Recipient, tx.Amount)
 		//* DONE(PAP): CreateTx, SignTx, AcceptTx, BcastTx
 		var address *rsa.PublicKey
 		for _, nInfo := range n.Ring {
