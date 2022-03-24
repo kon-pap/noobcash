@@ -2,3 +2,4 @@ bin
 tmp/*
 
 .DS_Store
+transaction0.txt
