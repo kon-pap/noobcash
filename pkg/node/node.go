@@ -355,9 +355,13 @@ func (n *Node) ConnectToBootstrap() error {
 
 func (n *Node) CheckTxQueueForMining() {
 	ticker := time.NewTicker(time.Second * checkTxCountIntervalSeconds)
+	capacity := bck.BlockCapacity
+	chain := len(n.Chain)
+	wait := 0
 	for range ticker.C {
-		// TODO(BIL): Either gradually decrease the required number of txs
+		wait++
 		// TODO(BIL): or split txouts during transaction creation
+		//split bigger amounts in smaller i.e 100 -> 20, 20, 20, 20, 10, 5, 5
 		// TODO(BIL): or both
 		if !n.semaCurrentlyMining.TryAcquire(1) {
 			continue
@@ -367,7 +371,20 @@ func (n *Node) CheckTxQueueForMining() {
 			newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
 			n.semaCurrentlyMining.Release(1)
 			go n.MineBlock(newBlock)
+			wait = 0
 			continue
+		} else if wait == 5 {
+			//wait 5 times before decreasing the number of txs.
+			//5 is arbitrary
+			// TODO(BIL): Either gradually decrease the required number of txs
+			if capacity > 1 {
+				capacity--
+			}
+			if len(n.Chain) > chain {
+				capacity = bck.BlockCapacity //reset the block capacity if one or more blocks applied
+				chain = len(n.Chain)
+			}
+			wait = 0
 		}
 		n.semaCurrentlyMining.Release(1)
 	}
