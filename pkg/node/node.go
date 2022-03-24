@@ -460,6 +460,7 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 				//!NOTE: handle conflict in applyBlock
 				//!NOTE: Lock the chain? Stop accepting incoming blocks? Minimg?
 				//!NOTE: DO we need incomingBlock as argument?
+				// TODO: Make sure that is invalid because previous hash is not correct
 				n.ResolveConflict(incomingBlock)
 			} else {
 				if !n.semaCurrentlyMiningInc.TryAcquire(1) { // means it was mining
