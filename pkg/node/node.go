@@ -373,7 +373,7 @@ func (n *Node) CheckTxQueueForMining() {
 			go n.MineBlock(newBlock)
 			wait = 0
 			continue
-		} else if wait == 3 {
+		} else if wait > 3 && n.pendingTxs.Len() != 0 {
 			//* DONE(BIL): Either gradually decrease the required number of txs
 			if capacity > 1 {
 				capacity--

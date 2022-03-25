@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
 func (n *Node) setupCliHandler() *mux.Router {
@@ -15,6 +16,7 @@ func (n *Node) setupCliHandler() *mux.Router {
 	r.HandleFunc("/balance", n.createGiveBalanceHandler()).Methods("GET")
 	r.HandleFunc("/view", n.createGiveLastBlockHandler()).Methods("GET")
 	r.HandleFunc("/submit", n.createAcceptAndSubmitTx()).Methods("POST")
+	r.HandleFunc("/view/utxos", n.createGiveUtxosHandler()).Methods("GET")
 	return r
 }
 
@@ -98,5 +100,28 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 			return
 		}
 		fmt.Fprintf(w, "Submitted transaction to node %d for %d", tx.Recipient, tx.Amount)
+	}
+}
+
+func (n *Node) createGiveUtxosHandler() http.HandlerFunc {
+	type minimalUtxo struct {
+		TxId   string `json:"txId"`
+		Id     string `json:"id"`
+		Amount int    `json:"amount"`
+	}
+	utxoToMinimal := func(utxo *backend.TxOut) minimalUtxo {
+		return minimalUtxo{
+			TxId:   utxo.TransactionId,
+			Id:     utxo.Id,
+			Amount: utxo.Amount,
+		}
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		utxos := n.Wallet.Utxos
+		minimalUtxos := make([]minimalUtxo, 0, len(utxos))
+		for _, utxo := range utxos {
+			minimalUtxos = append(minimalUtxos, utxoToMinimal(utxo))
+		}
+		json.NewEncoder(w).Encode(minimalUtxos)
 	}
 }
