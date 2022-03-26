@@ -45,7 +45,12 @@ func init() {
 	balanceCmd.SilenceUsage = true
 	submitCmd.SilenceUsage = true
 	viewCmd.SilenceUsage = true
+	submitManyCmd.SilenceUsage = true
+	utxosCmd.SilenceUsage = true
+
 	balanceCmd.SilenceErrors = true
 	submitCmd.SilenceErrors = true
 	viewCmd.SilenceErrors = true
+	submitManyCmd.SilenceErrors = true
+	utxosCmd.SilenceErrors = true
 }

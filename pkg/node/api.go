@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/kon-pap/noobcash/pkg/node/backend"
 )
 
 func (n *Node) setupCliHandler() *mux.Router {
@@ -15,6 +16,7 @@ func (n *Node) setupCliHandler() *mux.Router {
 	r.HandleFunc("/balance", n.createGiveBalanceHandler()).Methods("GET")
 	r.HandleFunc("/view", n.createGiveLastBlockHandler()).Methods("GET")
 	r.HandleFunc("/submit", n.createAcceptAndSubmitTx()).Methods("POST")
+	r.HandleFunc("/view/utxos", n.createGiveUtxosHandler()).Methods("GET")
 	return r
 }
 
@@ -67,8 +69,6 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 			http.Error(w, errMsg, http.StatusBadRequest)
 			return
 		}
-		fmt.Fprintf(w, "Submitting transaction to node %d for %d\n", tx.Recipient, tx.Amount)
-		//* DONE(PAP): CreateTx, SignTx, AcceptTx, BcastTx
 		var address *rsa.PublicKey
 		for _, nInfo := range n.Ring {
 			if nInfo.Id == tx.Recipient {
@@ -79,6 +79,7 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 		createdTx, err := n.Wallet.CreateAndSignTx(tx.Amount, address)
 		if err != nil {
 			errMsg := fmt.Sprintf("Creating transaction error: %s", err.Error())
+			log.Println(errMsg)
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
@@ -86,6 +87,7 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 		err = n.AcceptTx(createdTx)
 		if err != nil {
 			errMsg := fmt.Sprintf("Accepting transaction error: %s", err.Error())
+			log.Println(errMsg)
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
@@ -93,8 +95,33 @@ func (n *Node) createAcceptAndSubmitTx() http.HandlerFunc {
 		err = n.BroadcastTx(createdTx)
 		if err != nil {
 			errMsg := fmt.Sprintf("Broadcasting transaction error: %s", err.Error())
+			log.Println(errMsg)
 			http.Error(w, errMsg, http.StatusInternalServerError)
 			return
 		}
+		fmt.Fprintf(w, "Submitted transaction to node %d for %d", tx.Recipient, tx.Amount)
+	}
+}
+
+func (n *Node) createGiveUtxosHandler() http.HandlerFunc {
+	type minimalUtxo struct {
+		TxId   string `json:"txId"`
+		Id     string `json:"id"`
+		Amount int    `json:"amount"`
+	}
+	utxoToMinimal := func(utxo *backend.TxOut) minimalUtxo {
+		return minimalUtxo{
+			TxId:   utxo.TransactionId,
+			Id:     utxo.Id,
+			Amount: utxo.Amount,
+		}
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		utxos := n.Wallet.Utxos
+		minimalUtxos := make([]minimalUtxo, 0, len(utxos))
+		for _, utxo := range utxos {
+			minimalUtxos = append(minimalUtxos, utxoToMinimal(utxo))
+		}
+		json.NewEncoder(w).Encode(minimalUtxos)
 	}
 }

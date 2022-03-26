@@ -30,16 +30,28 @@ var submitCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		transactionJson := bytes.NewBuffer([]byte(`{"recipient":` + args[0] + `,"amount":` + args[1] + `}`))
+		submit := createSubmitter(ip, port)
+		reply, err := submit(args[0], args[1])
+		if err != nil {
+			return err
+		}
+		fmt.Println(reply)
+
+		return nil
+	},
+}
+
+func createSubmitter(ip string, port int) func(string, string) (string, error) {
+	return func(recipient, amount string) (string, error) {
+		transactionJson := bytes.NewBuffer([]byte(`{"recipient":` + recipient + `,"amount":` + amount + `}`))
 		body, err := node.GetResponseBody(
 			http.Post(fmt.Sprintf("http://%s:%d/submit", ip, port), "application/json", transactionJson),
 		)
 		if err != nil {
-			return err
+			return "", err
 		}
-		fmt.Println(string(body))
-		return nil
-	},
+		return string(body), nil
+	}
 }
 
 func init() {
