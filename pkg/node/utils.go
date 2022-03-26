@@ -50,6 +50,7 @@ func (tq *TxQueue) EnqueueMany(txs []*bck.Transaction) {
 
 	tq.mu.Lock()
 	defer tq.mu.Unlock()
+	//TODO: Consider PushFrontList to give higher priority to the re-inserted txs
 	tq.queue.PushBackList(extensionList)
 }
 

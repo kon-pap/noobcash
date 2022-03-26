@@ -118,6 +118,7 @@ func (n *Node) IsValidTx(tx *bck.Transaction) bool {
 }
 func (n *Node) AcceptTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
+		log.Println("AcceptTx: Invalid transaction")
 		return fmt.Errorf("transaction is not valid")
 	}
 	n.pendingTxs.Enqueue(tx)
@@ -201,20 +202,32 @@ func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 	return nil
 }
 
+const (
+	blockIsValid = iota
+	chainErr
+	incorrectMineErr
+	incorrectHashErr
+)
+
 //* BLOCK
-func (n *Node) IsValidBlock(block *bck.Block) bool {
+func (n *Node) IsValidBlock(block *bck.Block) (retval int) {
 	// GenesisBlock is valid
 	if block.IsGenesis() {
-		return true
+		return
 	}
 	dif := strings.Repeat("0", bck.Difficulty)
 	lastBlockHash := bck.HexEncodeByteSlice(n.getLastBlock().CurrentHash)
 	thisBlockHash := bck.HexEncodeByteSlice(block.CurrentHash)
 	thisBlockPreviousHash := bck.HexEncodeByteSlice(block.PreviousHash)
 
-	return lastBlockHash == thisBlockPreviousHash && // this block's previous block is our current last block
-		strings.HasPrefix(thisBlockHash, dif) && // this block's hash starts with the required number of zeros
-		bck.HexEncodeByteSlice(block.ComputeHash()) == thisBlockHash // this block's hash is correct
+	if lastBlockHash != thisBlockPreviousHash {
+		retval = chainErr
+	} else if !strings.HasPrefix(thisBlockHash, dif) {
+		retval = incorrectMineErr
+	} else if bck.HexEncodeByteSlice(block.ComputeHash()) != thisBlockHash {
+		retval = incorrectHashErr
+	}
+	return
 }
 
 func (n *Node) CancelBlock(block *bck.Block) {
@@ -274,11 +287,16 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 	log.Println("Applying new block with", len(block.Transactions), "transactions")
 
 	n.muChainLock.Lock()
-	defer n.muChainLock.Unlock()
-
-	if !n.IsValidBlock(block) {
+	blockValidity := n.IsValidBlock(block)
+	if blockValidity != blockIsValid {
+		if blockValidity == chainErr {
+			n.muChainLock.Unlock()
+			n.ResolveConflict(block)
+		}
 		return fmt.Errorf("block is not valid")
 	}
+	defer n.muChainLock.Unlock()
+
 	for _, tx := range block.Transactions {
 		if err := n.ApplyTx(tx); err != nil {
 			return err
@@ -315,12 +333,14 @@ func (n *Node) IsValidChain() bool {
 }
 */
 
-//TODO: use RemoveCompletedTxsFromQueue (somewhere)
-//* DONE(ORF): Endpoint for requesting n blocks (possibly whole chain)
-//* DONE(ORF): Endpoint for requesting chain size
+//*DONE: use RemoveCompletedTxsFromQueue (somewhere)
+//*DONE(ORF): Endpoint for requesting n blocks (possibly whole chain)
+//*DONE(ORF): Endpoint for requesting chain size
 func (n *Node) ResolveConflict(block *bck.Block) error {
 	max_len := len(n.Chain)
 	max_id := n.Id
+
+	// TODO: Grab locks
 
 	responses, _ := n.BroadcastByteSlice([]byte{}, chainLengthEndpoint)
 
@@ -361,9 +381,23 @@ func (n *Node) ResolveConflict(block *bck.Block) error {
 				return err
 			}
 
-			// TODO: Replace last Block of the chain and replace it with blocks
+			//*DONE: Replace last Block of the chain and replace it with blocks
 			//! Note: It assumes that the block before the one we remove is correct.
 			//! Note: Esentially assume max 1 block branches
+			blockToCancel := n.getLastBlock()
+			n.Chain = n.Chain[:len(n.Chain)-1]
+			n.CancelBlock(blockToCancel)
+			for _, block := range blocks {
+				//!NOTE: other way would be to `n.incBlockChan <- block`
+				if err := n.ApplyBlock(block); err != nil {
+					log.Println("ResolveConflict: error applying received block:", err)
+					// TODO: What do we do in this case? (as is, ApplyBlock will invoke ResolveConflict, which will create a lock starvation)
+					// TODO: So if this is what we want, we should release any locks grabbed by resolveConflict
+
+					// TODO: Other option, check validity here, and handle accordingly, calling ApplyBlock only after we're sure it's ok
+				}
+				n.RemoveCompletedTxsFromQueue(block)
+			}
 			break
 		}
 	}
@@ -460,22 +494,22 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 			n.BroadcastBlock(minedBlock)
 		case incomingBlock := <-n.incBlockChan:
 			log.Println("Processing received block...")
-			if !n.IsValidBlock(incomingBlock) {
-				//!NOTE: handle conflict in applyBlock
-				//!NOTE: Lock the chain? Stop accepting incoming blocks? Minimg?
-				//!NOTE: DO we need incomingBlock as argument?
-				// TODO: Make sure that is invalid because previous hash is not correct
-				n.ResolveConflict(incomingBlock)
-			} else {
-				if !n.semaCurrentlyMiningInc.TryAcquire(1) { // means it was mining
-					n.stopMiningChan <- struct{}{}
-					n.semaCurrentlyMiningInc.Acquire(context.Background(), 1) // block until mining has stopped
-				}
-				//!NOTE(ORF): Here one way or another we hold the semaphore
-				n.ApplyBlock(incomingBlock)
-				n.RemoveCompletedTxsFromQueue(incomingBlock)
-				n.semaCurrentlyMiningInc.Release(1)
+			// if !n.IsValidBlock(incomingBlock) {
+			// 	//!NOTE: handle conflict in applyBlock
+			// 	//!NOTE: Lock the chain? Stop accepting incoming blocks? Minimg?
+			// 	//!NOTE: DO we need incomingBlock as argument?
+			// 	// TODO: Make sure that is invalid because previous hash is not correct
+			// 	n.ResolveConflict(incomingBlock)
+			// } else {
+			if !n.semaCurrentlyMiningInc.TryAcquire(1) { // means it was mining
+				n.stopMiningChan <- struct{}{}
+				n.semaCurrentlyMiningInc.Acquire(context.Background(), 1) // block until mining has stopped
 			}
+			//!NOTE(ORF): Here one way or another we hold the semaphore
+			n.ApplyBlock(incomingBlock)
+			n.RemoveCompletedTxsFromQueue(incomingBlock)
+			n.semaCurrentlyMiningInc.Release(1)
+			// }
 		}
 	}
 }
