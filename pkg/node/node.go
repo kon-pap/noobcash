@@ -6,6 +6,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -202,15 +203,14 @@ func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 	return nil
 }
 
-const (
-	blockIsValid = iota
-	chainErr
-	incorrectMineErr
-	incorrectHashErr
+var (
+	chainErr         = errors.New("block is not valid for the chain")
+	incorrectMineErr = errors.New("block hash does not fulfill the difficulty requirement")
+	incorrectHashErr = errors.New("block hash does not equal the provided hash")
 )
 
 //* BLOCK
-func (n *Node) IsValidBlock(block *bck.Block) (retval int) {
+func (n *Node) IsValidBlock(block *bck.Block) (err error) {
 	// GenesisBlock is valid
 	if block.IsGenesis() {
 		return
@@ -221,11 +221,11 @@ func (n *Node) IsValidBlock(block *bck.Block) (retval int) {
 	thisBlockPreviousHash := bck.HexEncodeByteSlice(block.PreviousHash)
 
 	if lastBlockHash != thisBlockPreviousHash {
-		retval = chainErr
+		err = chainErr
 	} else if !strings.HasPrefix(thisBlockHash, dif) {
-		retval = incorrectMineErr
+		err = incorrectMineErr
 	} else if bck.HexEncodeByteSlice(block.ComputeHash()) != thisBlockHash {
-		retval = incorrectHashErr
+		err = incorrectHashErr
 	}
 	return
 }
@@ -287,15 +287,11 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 	log.Println("Applying new block with", len(block.Transactions), "transactions")
 
 	n.muChainLock.Lock()
-	blockValidity := n.IsValidBlock(block)
-	if blockValidity != blockIsValid {
-		if blockValidity == chainErr {
-			n.muChainLock.Unlock()
-			n.ResolveConflict(block)
-		}
-		return fmt.Errorf("block is not valid")
-	}
 	defer n.muChainLock.Unlock()
+
+	if err := n.IsValidBlock(block); err != nil {
+		return err
+	}
 
 	for _, tx := range block.Transactions {
 		if err := n.ApplyTx(tx); err != nil {
@@ -333,13 +329,25 @@ func (n *Node) IsValidChain() bool {
 }
 */
 
+func (n *Node) getNodeInfoById(id int) *NodeInfo {
+	for _, nInfo := range n.Ring {
+		if nInfo.Id == id {
+			return nInfo
+		}
+	}
+	panic("Node.getNodeInfoById() called with invalid id")
+}
+
+var (
+	deeperConflictErr = errors.New("deeper conflict")
+)
+
 //*DONE: use RemoveCompletedTxsFromQueue (somewhere)
 //*DONE(ORF): Endpoint for requesting n blocks (possibly whole chain)
 //*DONE(ORF): Endpoint for requesting chain size
-func (n *Node) ResolveConflict(block *bck.Block) error {
+func (n *Node) ResolveConflict(branchLen int) error {
 	max_len := len(n.Chain)
 	max_id := n.Id
-
 	// TODO: Grab locks
 
 	responses, _ := n.BroadcastByteSlice([]byte{}, chainLengthEndpoint)
@@ -362,48 +370,39 @@ func (n *Node) ResolveConflict(block *bck.Block) error {
 
 		}
 	}
-
 	if max_id == n.Id {
 		return nil
 	}
 
-	for _, nInfo := range n.Ring {
-		if nInfo.Id == max_id {
-			endpoint := fmt.Sprintf("/chain-tail/%d", max_len-len(n.Chain)+1)
-			res, err := n.SendByteSlice([]byte{}, nInfo.Hostname, nInfo.Port, endpointTy(endpoint))
-			if err != nil {
-				return err
-			}
+	resolverNodeInfo := n.getNodeInfoById(max_id)
 
-			var blocks []*bck.Block
-			err = json.Unmarshal([]byte(res), &blocks)
-			if err != nil {
-				return err
-			}
-
-			//*DONE: Replace last Block of the chain and replace it with blocks
-			//! Note: It assumes that the block before the one we remove is correct.
-			//! Note: Esentially assume max 1 block branches
-			blockToCancel := n.getLastBlock()
-			n.Chain = n.Chain[:len(n.Chain)-1]
-			n.CancelBlock(blockToCancel)
-			for _, block := range blocks {
-				//!NOTE: other way would be to `n.incBlockChan <- block`
-				if err := n.ApplyBlock(block); err != nil {
-					log.Println("ResolveConflict: error applying received block:", err)
-					// TODO: What do we do in this case? (as is, ApplyBlock will invoke ResolveConflict, which will create a lock starvation)
-					// TODO: So if this is what we want, we should release any locks grabbed by resolveConflict
-
-					// TODO: Other option, check validity here, and handle accordingly, calling ApplyBlock only after we're sure it's ok
-				}
-				n.RemoveCompletedTxsFromQueue(block)
-			}
-			break
-		}
+	endpoint := fmt.Sprintf("/chain-tail/%d", max_len-len(n.Chain)+1)
+	res, err := n.SendByteSlice([]byte{}, resolverNodeInfo.Hostname, resolverNodeInfo.Port, endpointTy(endpoint))
+	if err != nil {
+		return err
 	}
 
-	return nil
+	var blocks []*bck.Block
+	err = json.Unmarshal([]byte(res), &blocks)
+	if err != nil {
+		return err
+	}
 
+	//*DONE: Replace last Block of the chain and replace it with blocks
+	//! Note: It assumes that the block before the one we remove is correct.
+	//! Note: Esentially assume max 1 block branches
+	blockToCancel := n.getLastBlock()
+	n.Chain = n.Chain[:len(n.Chain)-1]
+	n.CancelBlock(blockToCancel)
+	for _, block := range blocks {
+		//!NOTE: other way would be to `n.incBlockChan <- block`
+		if err := n.ApplyBlock(block); err != nil && err == chainErr {
+			return deeperConflictErr
+		}
+		n.RemoveCompletedTxsFromQueue(block)
+		//!NOTE(ORF): This loop SHOULD be able to fail only at the first iteration.
+	}
+	return nil
 }
 
 //* RING
@@ -481,6 +480,14 @@ func (n *Node) RemoveCompletedTxsFromQueue(incomingBlock *bck.Block) {
 	n.pendingTxs.DequeueManyByValue(txIdsToLookFor)
 }
 
+func (n *Node) tryApplyBlockOrResolve(block *bck.Block) {
+	if err := n.ApplyBlock(block); err != nil && err == chainErr {
+		for conflictDepth := 1; n.ResolveConflict(conflictDepth) == deeperConflictErr; conflictDepth++ {
+			log.Println("Deeper conflict found, retrying with depth:", conflictDepth)
+		}
+	}
+}
+
 // Listens for incoming or mined blocks
 //
 // Should be called as a goroutine
@@ -490,23 +497,16 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 		select {
 		case minedBlock := <-n.minedBlockChan:
 			log.Println("Processing mined block...")
-			n.ApplyBlock(minedBlock)
+			n.tryApplyBlockOrResolve(minedBlock)
 			n.BroadcastBlock(minedBlock)
 		case incomingBlock := <-n.incBlockChan:
 			log.Println("Processing received block...")
-			// if !n.IsValidBlock(incomingBlock) {
-			// 	//!NOTE: handle conflict in applyBlock
-			// 	//!NOTE: Lock the chain? Stop accepting incoming blocks? Minimg?
-			// 	//!NOTE: DO we need incomingBlock as argument?
-			// 	// TODO: Make sure that is invalid because previous hash is not correct
-			// 	n.ResolveConflict(incomingBlock)
-			// } else {
 			if !n.semaCurrentlyMiningInc.TryAcquire(1) { // means it was mining
 				n.stopMiningChan <- struct{}{}
 				n.semaCurrentlyMiningInc.Acquire(context.Background(), 1) // block until mining has stopped
 			}
 			//!NOTE(ORF): Here one way or another we hold the semaphore
-			n.ApplyBlock(incomingBlock)
+			n.tryApplyBlockOrResolve(incomingBlock)
 			n.RemoveCompletedTxsFromQueue(incomingBlock)
 			n.semaCurrentlyMiningInc.Release(1)
 			// }
