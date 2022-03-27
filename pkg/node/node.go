@@ -346,6 +346,7 @@ var (
 //*DONE(ORF): Endpoint for requesting n blocks (possibly whole chain)
 //*DONE(ORF): Endpoint for requesting chain size
 func (n *Node) ResolveConflict() error {
+	log.Println("Resolving Conflict...")
 	max_len := len(n.Chain)
 	max_id := n.Id
 	// TODO: Grab locks
