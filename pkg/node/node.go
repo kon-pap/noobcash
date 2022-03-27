@@ -6,6 +6,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -118,6 +119,7 @@ func (n *Node) IsValidTx(tx *bck.Transaction) bool {
 }
 func (n *Node) AcceptTx(tx *bck.Transaction) error {
 	if !n.IsValidTx(tx) {
+		log.Println("AcceptTx: Invalid transaction")
 		return fmt.Errorf("transaction is not valid")
 	}
 	n.pendingTxs.Enqueue(tx)
@@ -201,20 +203,31 @@ func (n *Node) BroadcastTx(tx *bck.Transaction) error {
 	return nil
 }
 
+var (
+	chainErr         = errors.New("block is not valid for the chain")
+	incorrectMineErr = errors.New("block hash does not fulfill the difficulty requirement")
+	incorrectHashErr = errors.New("block hash does not equal the provided hash")
+)
+
 //* BLOCK
-func (n *Node) IsValidBlock(block *bck.Block) bool {
+func (n *Node) IsValidBlock(block *bck.Block) (err error) {
 	// GenesisBlock is valid
 	if block.IsGenesis() {
-		return true
+		return
 	}
 	dif := strings.Repeat("0", bck.Difficulty)
 	lastBlockHash := bck.HexEncodeByteSlice(n.getLastBlock().CurrentHash)
 	thisBlockHash := bck.HexEncodeByteSlice(block.CurrentHash)
 	thisBlockPreviousHash := bck.HexEncodeByteSlice(block.PreviousHash)
 
-	return lastBlockHash == thisBlockPreviousHash && // this block's previous block is our current last block
-		strings.HasPrefix(thisBlockHash, dif) && // this block's hash starts with the required number of zeros
-		bck.HexEncodeByteSlice(block.ComputeHash()) == thisBlockHash // this block's hash is correct
+	if lastBlockHash != thisBlockPreviousHash {
+		err = chainErr
+	} else if !strings.HasPrefix(thisBlockHash, dif) {
+		err = incorrectMineErr
+	} else if bck.HexEncodeByteSlice(block.ComputeHash()) != thisBlockHash {
+		err = incorrectHashErr
+	}
+	return
 }
 
 func (n *Node) CancelBlock(block *bck.Block) {
@@ -276,9 +289,10 @@ func (n *Node) ApplyBlock(block *bck.Block) error {
 	n.muChainLock.Lock()
 	defer n.muChainLock.Unlock()
 
-	if !n.IsValidBlock(block) {
-		return fmt.Errorf("block is not valid")
+	if err := n.IsValidBlock(block); err != nil {
+		return err
 	}
+
 	for _, tx := range block.Transactions {
 		if err := n.ApplyTx(tx); err != nil {
 			return err
@@ -315,14 +329,81 @@ func (n *Node) IsValidChain() bool {
 }
 */
 
-/*
-//TODO: use RemoveCompletedTxsFromQueue (somewhere)
-
-//* DONE(ORF): Endpoint for requesting n blocks (possibly whole chain)
-//* DONE(ORF): Endpoint for requesting chain size
-func (n *Node) ResolveConflict(block *bck.Block) error {
+func (n *Node) getNodeInfoById(id int) *NodeInfo {
+	for _, nInfo := range n.Ring {
+		if nInfo.Id == id {
+			return nInfo
+		}
+	}
+	panic("Node.getNodeInfoById() called with invalid id")
 }
-*/
+
+var (
+	deeperConflictErr = errors.New("deeper conflict")
+)
+
+//*DONE: use RemoveCompletedTxsFromQueue (somewhere)
+//*DONE(ORF): Endpoint for requesting n blocks (possibly whole chain)
+//*DONE(ORF): Endpoint for requesting chain size
+func (n *Node) ResolveConflict() error {
+	max_len := len(n.Chain)
+	max_id := n.Id
+	// TODO: Grab locks
+
+	responses, _ := n.BroadcastByteSlice([]byte{}, chainLengthEndpoint)
+
+	for id, res := range responses {
+		if id == n.Id {
+			continue
+		}
+
+		len, err := strconv.Atoi(string(res))
+		if err != nil {
+			return err
+		}
+
+		if len > max_len {
+			max_len = len
+			max_id = id
+		} else if len == max_len && id > max_id {
+			max_id = id
+
+		}
+	}
+	if max_id == n.Id {
+		return nil
+	}
+
+	resolverNodeInfo := n.getNodeInfoById(max_id)
+
+	endpoint := fmt.Sprintf("/chain-tail/%d", max_len-len(n.Chain)+1)
+	res, err := n.SendByteSlice([]byte{}, resolverNodeInfo.Hostname, resolverNodeInfo.Port, endpointTy(endpoint))
+	if err != nil {
+		return err
+	}
+
+	var blocks []*bck.Block
+	err = json.Unmarshal([]byte(res), &blocks)
+	if err != nil {
+		return err
+	}
+
+	//*DONE: Replace last Block of the chain and replace it with blocks
+	//! Note: It assumes that the block before the one we remove is correct.
+	//! Note: Esentially assume max 1 block branches
+	blockToCancel := n.getLastBlock()
+	n.Chain = n.Chain[:len(n.Chain)-1]
+	n.CancelBlock(blockToCancel)
+	for _, block := range blocks {
+		//!NOTE: other way would be to `n.incBlockChan <- block`
+		if err := n.ApplyBlock(block); err != nil && err == chainErr {
+			return deeperConflictErr
+		}
+		n.RemoveCompletedTxsFromQueue(block)
+		//!NOTE(ORF): This loop SHOULD be able to fail only at the first iteration.
+	}
+	return nil
+}
 
 //* RING
 func (n *Node) ConnectToBootstrap() error {
@@ -398,6 +479,14 @@ func (n *Node) RemoveCompletedTxsFromQueue(incomingBlock *bck.Block) {
 	n.pendingTxs.DequeueManyByValue(txIdsToLookFor)
 }
 
+func (n *Node) tryApplyBlockOrResolve(block *bck.Block) {
+	if err := n.ApplyBlock(block); err != nil && err == chainErr {
+		for conflictDepth := 1; n.ResolveConflict() != nil; conflictDepth++ {
+			log.Println("Deeper conflict found, retrying with depth:", conflictDepth)
+		}
+	}
+}
+
 // Listens for incoming or mined blocks
 //
 // Should be called as a goroutine
@@ -407,22 +496,19 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 		select {
 		case minedBlock := <-n.minedBlockChan:
 			log.Println("Processing mined block...")
-			n.ApplyBlock(minedBlock)
+			n.tryApplyBlockOrResolve(minedBlock)
 			n.BroadcastBlock(minedBlock)
 		case incomingBlock := <-n.incBlockChan:
 			log.Println("Processing received block...")
-			if !n.IsValidBlock(incomingBlock) {
-				//!NOTE: handle conflict in applyBlock
-			} else {
-				if !n.semaCurrentlyMiningInc.TryAcquire(1) { // means it was mining
-					n.stopMiningChan <- struct{}{}
-					n.semaCurrentlyMiningInc.Acquire(context.Background(), 1) // block until mining has stopped
-				}
-				//!NOTE(ORF): Here one way or another we hold the semaphore
-				n.ApplyBlock(incomingBlock)
-				n.RemoveCompletedTxsFromQueue(incomingBlock)
-				n.semaCurrentlyMiningInc.Release(1)
+			if !n.semaCurrentlyMiningInc.TryAcquire(1) { // means it was mining
+				n.stopMiningChan <- struct{}{}
+				n.semaCurrentlyMiningInc.Acquire(context.Background(), 1) // block until mining has stopped
 			}
+			//!NOTE(ORF): Here one way or another we hold the semaphore
+			n.tryApplyBlockOrResolve(incomingBlock)
+			n.RemoveCompletedTxsFromQueue(incomingBlock)
+			n.semaCurrentlyMiningInc.Release(1)
+			// }
 		}
 	}
 }
