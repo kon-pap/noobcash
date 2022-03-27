@@ -437,7 +437,6 @@ func (n *Node) ConnectToBootstrap() error {
 
 func (n *Node) CheckTxQueueForMining() {
 	ticker := time.NewTicker(time.Second * checkTxCountIntervalSeconds)
-	capacity := bck.BlockCapacity
 	chain := len(n.Chain)
 	wait := 0
 	for range ticker.C {
@@ -448,7 +447,7 @@ func (n *Node) CheckTxQueueForMining() {
 		if !n.semaCurrentlyMining.TryAcquire(1) {
 			continue
 		}
-		if txs := n.pendingTxs.DequeueMany(capacity); txs != nil {
+		if txs := n.pendingTxs.DequeueMany(bck.TmpBlockCapacity); txs != nil {
 			newBlock := bck.NewBlock(n.getLastBlock().CurrentHash)
 			newBlock.AddManyTxs(txs) // error handling unnecessary, newBlock is empty
 			n.semaCurrentlyMining.Release(1)
@@ -457,12 +456,12 @@ func (n *Node) CheckTxQueueForMining() {
 			continue
 		} else if wait > 3 && n.pendingTxs.Len() != 0 {
 			//* DONE(BIL): Either gradually decrease the required number of txs
-			if capacity > 1 {
-				capacity--
-				log.Println("Temporarily decreasing block capacity to: ", capacity)
+			if bck.TmpBlockCapacity > 1 {
+				bck.TmpBlockCapacity--
+				log.Println("Temporarily decreasing block capacity to: ", bck.TmpBlockCapacity)
 			}
 			if len(n.Chain) > chain {
-				capacity = bck.BlockCapacity //reset the block capacity if one or more blocks applied
+				bck.TmpBlockCapacity = bck.BlockCapacity //reset the block capacity if one or more blocks applied
 				chain = len(n.Chain)
 			}
 			wait = 0
@@ -579,8 +578,8 @@ func (n *Node) DoInitialBootstrapActions() {
 
 	// Setting block capacity to 1
 	//! Works because we don't check block capacity in isValidBlock
-	previousCapacity := bck.BlockCapacity
-	bck.BlockCapacity = 1
+	// previousCapacity := bck.TmpBlockCapacity
+	bck.TmpBlockCapacity = 1
 
 	targets := make([]*bck.TxTargetTy, 0, n.nodecnt-1)
 	for _, nInfo := range n.Ring {
@@ -608,7 +607,7 @@ func (n *Node) DoInitialBootstrapActions() {
 	}
 	log.Println("Created initial transactions and added to the chain")
 	// Resetting block capacity
-	bck.BlockCapacity = previousCapacity
+	bck.TmpBlockCapacity = bck.BlockCapacity
 
 	log.Println("Reset block capacity. Game on!")
 }

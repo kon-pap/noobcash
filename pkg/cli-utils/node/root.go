@@ -38,6 +38,7 @@ func setupNode(cmd *cobra.Command) *node.Node {
 	newNode := node.NewNode(0, 1024, ip, nodeport, apiport)
 	node.BootstrapHostname, _ = cmd.Flags().GetString("bootstrap")
 	backend.BlockCapacity, _ = cmd.Flags().GetInt("capacity")
+	backend.TmpBlockCapacity = backend.BlockCapacity
 	backend.Difficulty, _ = cmd.Flags().GetInt("difficulty")
 	return newNode
 }
