@@ -339,7 +339,8 @@ func (n *Node) getNodeInfoById(id int) *NodeInfo {
 }
 
 var (
-	deeperConflictErr = errors.New("deeper conflict")
+	deeperConflictErr  = errors.New("deeper conflict")
+	tooDeepConflictErr = errors.New("conflict is deeper than possible")
 )
 
 //*DONE: use RemoveCompletedTxsFromQueue (somewhere)
@@ -376,7 +377,10 @@ func (n *Node) ResolveConflict(branchLen int) error {
 
 	resolverNodeInfo := n.getNodeInfoById(max_id)
 
-	endpoint := fmt.Sprintf("/chain-tail/%d", max_len-len(n.Chain)+1)
+	if max_len-len(n.Chain)+branchLen > max_len {
+		return tooDeepConflictErr
+	}
+	endpoint := fmt.Sprintf("/chain-tail/%d", max_len-len(n.Chain)+branchLen)
 	res, err := n.SendByteSlice([]byte{}, resolverNodeInfo.Hostname, resolverNodeInfo.Port, endpointTy(endpoint))
 	if err != nil {
 		return err
@@ -482,8 +486,18 @@ func (n *Node) RemoveCompletedTxsFromQueue(incomingBlock *bck.Block) {
 
 func (n *Node) tryApplyBlockOrResolve(block *bck.Block) {
 	if err := n.ApplyBlock(block); err != nil && err == chainErr {
-		for conflictDepth := 1; n.ResolveConflict(conflictDepth) == deeperConflictErr; conflictDepth++ {
-			log.Println("Deeper conflict found, retrying with depth:", conflictDepth)
+		for conflictDepth := 1; ; conflictDepth++ {
+			err := n.ResolveConflict(conflictDepth)
+			if err == nil {
+				break
+			}
+			if err == deeperConflictErr {
+				log.Println("Deeper conflict found, retrying with depth:", conflictDepth)
+				continue
+			}
+			if err == tooDeepConflictErr {
+				panic("Conflict depth of " + strconv.Itoa(conflictDepth) + " is too deep")
+			}
 		}
 	}
 }
