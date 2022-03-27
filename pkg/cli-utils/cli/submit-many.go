@@ -31,6 +31,9 @@ var submitManyCmd = &cobra.Command{
 			return err
 		}
 		waitEnable, err := cmd.Flags().GetBool("wait")
+		if err != nil {
+			return err
+		}
 		var submit func(string, string) (string, error)
 		if waitEnable {
 			timeout, err := cmd.Flags().GetInt("timeout")
