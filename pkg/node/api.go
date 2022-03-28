@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/kon-pap/noobcash/pkg/node/backend"
@@ -17,6 +18,8 @@ func (n *Node) setupCliHandler() *mux.Router {
 	r.HandleFunc("/view", n.createGiveLastBlockHandler()).Methods("GET")
 	r.HandleFunc("/submit", n.createAcceptAndSubmitTx()).Methods("POST")
 	r.HandleFunc("/view/utxos", n.createGiveUtxosHandler()).Methods("GET")
+	r.HandleFunc("/view/block-time", n.createBlockTimeHandler()).Methods("GET")
+	r.HandleFunc("/view/tx-count", n.createTxCountHandler()).Methods("GET")
 	return r
 }
 
@@ -123,5 +126,32 @@ func (n *Node) createGiveUtxosHandler() http.HandlerFunc {
 			minimalUtxos = append(minimalUtxos, utxoToMinimal(utxo))
 		}
 		json.NewEncoder(w).Encode(minimalUtxos)
+	}
+}
+
+func (n *Node) createBlockTimeHandler() http.HandlerFunc {
+	type blockTimeInfo struct {
+		Latest      string `json:"latest"`
+		Avg         string `json:"avg"`
+		Total       string `json:"total"`
+		ChainLength int    `json:"chainLength"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(blockTimeInfo{
+			Latest:      strconv.Itoa(int(LastBlockTime/1000)) + "ms",
+			Avg:         strconv.Itoa(int(AverageBlockTime/1000)) + "ms",
+			Total:       strconv.Itoa(int(TotalBlockTimes/1000)) + "ms",
+			ChainLength: len(n.Chain),
+		})
+	}
+}
+
+func (n *Node) createTxCountHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		txCount := 0
+		for _, block := range n.Chain {
+			txCount += len(block.Transactions)
+		}
+		fmt.Fprintf(w, "%d", txCount)
 	}
 }

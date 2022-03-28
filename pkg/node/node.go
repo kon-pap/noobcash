@@ -24,6 +24,11 @@ import (
 const checkTxCountIntervalSeconds = 5
 
 var BootstrapHostname string
+var (
+	AverageBlockTime = int64(0)  // nanoseconds
+	LastBlockTime    = int64(-1) // nanoseconds
+	TotalBlockTimes  = int64(0)
+)
 
 type Node struct {
 	Id     int
@@ -234,6 +239,13 @@ func (n *Node) CancelBlock(block *bck.Block) {
 	n.pendingTxs.EnqueueMany(block.Transactions)
 }
 
+func (n *Node) fixBlockTime(start time.Time) {
+	timediff := int64(time.Since(start))
+	LastBlockTime = timediff
+	TotalBlockTimes += timediff
+	AverageBlockTime = TotalBlockTimes / int64(len(n.Chain))
+}
+
 // Should be usually called as a goroutine.
 func (n *Node) MineBlock(block *bck.Block) {
 	//*DONE(PAP): use two locks, one shared with checkTxQueue and one shared with SelectMinedOrIncoming
@@ -241,6 +253,8 @@ func (n *Node) MineBlock(block *bck.Block) {
 		panic("Node.MineBlock() called on genesis block")
 	}
 	log.Println("Mining block")
+
+	start := time.Now()
 
 	//!NOTE Block till you get the lock that allows you to mine
 	//!NOTE No other block is being mined
@@ -279,6 +293,7 @@ func (n *Node) MineBlock(block *bck.Block) {
 			break
 		}
 	}
+	n.fixBlockTime(start)
 	n.minedBlockChan <- block
 }
 

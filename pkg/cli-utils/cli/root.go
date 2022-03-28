@@ -47,10 +47,14 @@ func init() {
 	viewCmd.SilenceUsage = true
 	submitManyCmd.SilenceUsage = true
 	utxosCmd.SilenceUsage = true
+	blockTimeCmd.SilenceUsage = true
+	txCountCmd.SilenceUsage = true
 
 	balanceCmd.SilenceErrors = true
 	submitCmd.SilenceErrors = true
 	viewCmd.SilenceErrors = true
 	submitManyCmd.SilenceErrors = true
 	utxosCmd.SilenceErrors = true
+	blockTimeCmd.SilenceErrors = true
+	txCountCmd.SilenceErrors = true
 }
