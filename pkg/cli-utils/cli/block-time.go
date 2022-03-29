@@ -8,16 +8,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var blockTimeCmd = &cobra.Command{
-	Use:   "block-time",
-	Short: "Get info related to block time",
+var statsCmd = &cobra.Command{
+	Use:   "stats",
+	Short: "Get stats",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ip, port, err := getAddress(cmd)
 		if err != nil {
 			return err
 		}
 		body, err := node.GetResponseBody(
-			http.DefaultClient.Get(fmt.Sprintf("http://%s:%d/view/block-time", ip, port)),
+			http.DefaultClient.Get(fmt.Sprintf("http://%s:%d/view/stats", ip, port)),
 		)
 		if err != nil {
 			return err
@@ -28,5 +28,5 @@ var blockTimeCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(blockTimeCmd)
+	rootCmd.AddCommand(statsCmd)
 }

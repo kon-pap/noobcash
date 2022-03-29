@@ -28,6 +28,10 @@ var (
 	AverageBlockTime = int64(0)  // nanoseconds
 	LastBlockTime    = int64(-1) // nanoseconds
 	TotalBlockTimes  = int64(0)
+
+	TxThroughputFlag      = false
+	TxThroughputStartTime = time.Now()
+	AllTxsDuration        = time.Duration(0)
 )
 
 type Node struct {
@@ -127,6 +131,10 @@ func (n *Node) AcceptTx(tx *bck.Transaction) error {
 		log.Println("AcceptTx: Invalid transaction")
 		return fmt.Errorf("transaction is not valid")
 	}
+	if !TxThroughputFlag {
+		TxThroughputFlag = true
+		TxThroughputStartTime = time.Now()
+	}
 	n.pendingTxs.Enqueue(tx)
 	return nil
 }
@@ -171,6 +179,7 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 		}
 	}
 
+	AllTxsDuration = time.Since(TxThroughputStartTime)
 	return nil
 
 }

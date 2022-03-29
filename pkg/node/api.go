@@ -18,8 +18,7 @@ func (n *Node) setupCliHandler() *mux.Router {
 	r.HandleFunc("/view", n.createGiveLastBlockHandler()).Methods("GET")
 	r.HandleFunc("/submit", n.createAcceptAndSubmitTx()).Methods("POST")
 	r.HandleFunc("/view/utxos", n.createGiveUtxosHandler()).Methods("GET")
-	r.HandleFunc("/view/block-time", n.createBlockTimeHandler()).Methods("GET")
-	r.HandleFunc("/view/tx-count", n.createTxCountHandler()).Methods("GET")
+	r.HandleFunc("/view/stats", n.createStatsHandler()).Methods("GET")
 	return r
 }
 
@@ -129,29 +128,29 @@ func (n *Node) createGiveUtxosHandler() http.HandlerFunc {
 	}
 }
 
-func (n *Node) createBlockTimeHandler() http.HandlerFunc {
+func (n *Node) createStatsHandler() http.HandlerFunc {
 	type blockTimeInfo struct {
-		Latest      string `json:"latest"`
-		Avg         string `json:"avg"`
-		Total       string `json:"total"`
-		ChainLength int    `json:"chainLength"`
+		Latest       string `json:"latest"`
+		Avg          string `json:"avg"`
+		Total        string `json:"total"`
+		ChainLength  int    `json:"chainLength"`
+		TxCount      int    `json:"txCount"`
+		TxThroughput string `json:"txThroughput"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(blockTimeInfo{
-			Latest:      strconv.Itoa(int(LastBlockTime/1000)) + "ms",
-			Avg:         strconv.Itoa(int(AverageBlockTime/1000)) + "ms",
-			Total:       strconv.Itoa(int(TotalBlockTimes/1000)) + "ms",
-			ChainLength: len(n.Chain),
-		})
-	}
-}
-
-func (n *Node) createTxCountHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		txCount := 0
+		var txCount int
 		for _, block := range n.Chain {
 			txCount += len(block.Transactions)
+
 		}
-		fmt.Fprintf(w, "%d", txCount)
+		txThroughput := fmt.Sprintf("%f txs/ms", float64(txCount)/(float64(AllTxsDuration)*1000))
+		json.NewEncoder(w).Encode(blockTimeInfo{
+			Latest:       strconv.Itoa(int(LastBlockTime/1000)) + "ms",
+			Avg:          strconv.Itoa(int(AverageBlockTime/1000)) + "ms",
+			Total:        strconv.Itoa(int(TotalBlockTimes/1000)) + "ms",
+			ChainLength:  len(n.Chain),
+			TxCount:      txCount,
+			TxThroughput: txThroughput,
+		})
 	}
 }
