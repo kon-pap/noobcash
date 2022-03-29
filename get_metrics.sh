@@ -31,7 +31,7 @@ for i in $(seq 0 $N); do
     myApiPort=$((APIPORT + i))
     myHostString="$myHost:$myApiPort"
 
-    eval "./noobcash-cli tx-count -a $myHostString"
+    eval "./noobcash-cli stats -a $myHostString"
 done
 
 for i in $(seq 0 $N); do
@@ -40,12 +40,4 @@ for i in $(seq 0 $N); do
     myHostString="$myHost:$myPort"
 
     eval "curl -X POST http://$myHostString/chain-length && echo "
-done
-
-for i in $(seq 0 $N); do
-    myHost="${hostnames[$i]}"
-    myApiPort=$((APIPORT + i))
-    myHostString="$myHost:$myApiPort"
-
-    eval "./noobcash-cli block-time -a $myHostString"
 done
