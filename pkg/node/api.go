@@ -143,7 +143,7 @@ func (n *Node) createStatsHandler() http.HandlerFunc {
 			txCount += len(block.Transactions)
 
 		}
-		txThroughput := fmt.Sprintf("%f txs/ms", float64(txCount)/(float64(AllTxsDuration)*1000))
+		txThroughput := fmt.Sprintf("%f txs/ms", float64(txCount)/(float64(AllTxsDuration)/1000))
 		json.NewEncoder(w).Encode(blockTimeInfo{
 			Latest:       strconv.Itoa(int(LastBlockTime/1000)) + "ms",
 			Avg:          strconv.Itoa(int(AverageBlockTime/1000)) + "ms",
