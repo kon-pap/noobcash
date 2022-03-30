@@ -72,8 +72,8 @@ type Transaction struct {
 	// ReceiverAddress *rsa.PublicKey
 	Amount    int
 	Id        []byte
-	Inputs    InputSetTy
-	Outputs   map[string]*TxOut
+	Inputs    TxOutMap
+	Outputs   TxOutMap
 	Signature []byte
 }
 type transactionJson struct {
@@ -81,23 +81,19 @@ type transactionJson struct {
 	SenderAddress   string   `json:"senderAddress"`
 	ReceiverAddress string   `json:"receiverAddress"`
 	Amount          int      `json:"amount"`
-	Inputs          []string `json:"inputs"`
+	Inputs          []*TxOut `json:"inputs"`
 	Outputs         []*TxOut `json:"outputs"`
 	Signature       string   `json:"signature"`
 }
 
 func (tx *Transaction) MarshalJSON() ([]byte, error) {
-	txIns := make([]string, len(tx.Inputs))
-	txOuts := make([]*TxOut, len(tx.Outputs))
-	i := 0
-	for txInId := range tx.Inputs {
-		txIns[i] = string(txInId)
-		i++
+	txIns := make([]*TxOut, 0, len(tx.Inputs))
+	txOuts := make([]*TxOut, 0, len(tx.Outputs))
+	for _, txIn := range tx.Inputs {
+		txIns = append(txIns, txIn)
 	}
-	i = 0
 	for _, txOut := range tx.Outputs {
-		txOuts[i] = txOut
-		i++
+		txOuts = append(txOuts, txOut)
 	}
 	return json.Marshal(transactionJson{
 		Id:            HexEncodeByteSlice(tx.Id),
@@ -115,13 +111,13 @@ func (tx *Transaction) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	txIns := make(InputSetTy, len(txJson.Inputs))
-	txOuts := make(map[string]*TxOut, len(txJson.Outputs))
-	for _, txInId := range txJson.Inputs {
-		txIns.Add(txInId)
+	txIns := make(TxOutMap, len(txJson.Inputs))
+	txOuts := make(TxOutMap, len(txJson.Outputs))
+	for _, txIn := range txJson.Inputs {
+		txIns.Add(txIn)
 	}
 	for _, txOut := range txJson.Outputs {
-		txOuts[txOut.Id] = txOut
+		txOuts.Add(txOut)
 	}
 
 	tx.Id = HexDecodeByteSlice(txJson.Id)
@@ -147,8 +143,8 @@ func NewTransaction(from *rsa.PublicKey, amount int) *Transaction {
 		SenderAddress: from,
 		// ReceiverAddress: to,
 		Amount:  amount,
-		Inputs:  InputSetTy{},
-		Outputs: map[string]*TxOut{},
+		Inputs:  TxOutMap{},
+		Outputs: TxOutMap{},
 	}
 }
 
@@ -160,10 +156,8 @@ func NewGenesisTransaction(to *rsa.PublicKey, amount int) *Transaction {
 	newTxOut.Id = HexEncodeByteSlice(newTx.Id)
 	newTxOut.ComputeAndFillHash()
 
-	newTx.Outputs[newTxOut.Id] = newTxOut
+	newTx.Outputs.Add(newTxOut)
 	newTx.ComputeAndFillHash()
-	// newTxOut.TransactionId = HexEncodeByteSlice(newTx.Id)
-
 	return newTx
 }
 

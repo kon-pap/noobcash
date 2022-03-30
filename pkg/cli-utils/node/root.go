@@ -2,6 +2,8 @@ package node
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -16,13 +18,41 @@ var rootCmd = &cobra.Command{
 	Long: `Noobcash is a peer-to-peer blockchain network supporting basic payments.
 Class project for the course "Distributed Systems" at the National Technical University of Athens`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		newNode := setupNode(cmd)
+		newNode, closeFunc := setupNode(cmd)
+		defer closeFunc()
 
 		if err := newNode.Start(); err != nil {
 			return err
 		}
 		return nil
 	},
+}
+
+func saveLogs(fileId string) func() {
+	logfile := "./logs" + fileId + ".txt"
+	f, _ := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+
+	out := os.Stderr
+	mw := io.MultiWriter(out, f)
+
+	r, w, _ := os.Pipe()
+
+	// os.Stdout = w
+	os.Stderr = w
+
+	log.SetOutput(mw)
+	exit := make(chan bool)
+
+	go func() {
+		_, _ = io.Copy(mw, r)
+		exit <- true
+	}()
+
+	return func() {
+		_ = w.Close()
+		<-exit
+		_ = f.Close()
+	}
 }
 
 func getNodeApiHostDetails(cmd *cobra.Command) (string, string) {
@@ -32,7 +62,7 @@ func getNodeApiHostDetails(cmd *cobra.Command) (string, string) {
 }
 
 // Get cli flags create and set up a new node
-func setupNode(cmd *cobra.Command) *node.Node {
+func setupNode(cmd *cobra.Command) (*node.Node, func()) {
 	ip, nodeport := getNodeApiHostDetails(cmd)
 	apiport, _ := cmd.Flags().GetString("apiport")
 	newNode := node.NewNode(0, 1024, ip, nodeport, apiport)
@@ -40,7 +70,8 @@ func setupNode(cmd *cobra.Command) *node.Node {
 	backend.BlockCapacity, _ = cmd.Flags().GetInt("capacity")
 	backend.TmpBlockCapacity = backend.BlockCapacity
 	backend.Difficulty, _ = cmd.Flags().GetInt("difficulty")
-	return newNode
+
+	return newNode, saveLogs(apiport)
 }
 
 func Execute() {

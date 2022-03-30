@@ -117,9 +117,9 @@ func (n *Node) IsValidTx(tx *bck.Transaction) bool {
 	//Step2: check transaction inputs/outputs
 	return n.IsValidSig(tx) && func() bool {
 		senderNode := n.Ring[bck.PubKeyToPem(tx.SenderAddress)]
-		for txInId := range tx.Inputs {
-			if _, ok := senderNode.WInfo.Utxos[string(txInId)]; !ok {
-				log.Println("Wallet", senderNode.Id, "does not have UTXO", txInId)
+		for _, txIn := range tx.Inputs {
+			if !senderNode.WInfo.Utxos.Has(txIn) {
+				log.Println("Wallet", senderNode.Id, "does not have UTXO", txIn.Id)
 				return false
 			}
 		}
@@ -159,10 +159,10 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 		senderAddress = bck.PubKeyToPem(tx.SenderAddress)
 		senderWalletInfo = n.Ring[senderAddress].WInfo
 
-		for txInId := range tx.Inputs {
-			previousUtxo := senderWalletInfo.Utxos[string(txInId)]
+		for _, txIn := range tx.Inputs {
+			previousUtxo := senderWalletInfo.Utxos[txIn.Id]
 			senderWalletInfo.Balance -= previousUtxo.Amount
-			delete(senderWalletInfo.Utxos, string(txInId))
+			senderWalletInfo.Utxos.Remove(txIn)
 		}
 	}
 
@@ -171,11 +171,11 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 		receiverWalletInfo := n.Ring[receiverAddress].WInfo
 
 		receiverWalletInfo.Balance += txOut.Amount // increase receiver's balance
-		receiverWalletInfo.Utxos[txOut.Id] = txOut // add new txOut to receiver's utxos
+		receiverWalletInfo.Utxos.Add(txOut)        // add new UTXO to receiver's UTXOs
 		// if this wallet is the receiver then update the private state as well
 		if receiverAddress == nodeAddress {
 			n.Wallet.Balance += txOut.Amount
-			n.Wallet.Utxos[txOut.Id] = txOut
+			n.Wallet.Utxos.Add(txOut)
 		}
 	}
 
@@ -244,7 +244,7 @@ func (n *Node) IsValidBlock(block *bck.Block) (err error) {
 	return
 }
 
-func (n *Node) CancelBlock(block *bck.Block) {
+func (n *Node) CancelNotAppliedBlock(block *bck.Block) {
 	n.pendingTxs.EnqueueMany(block.Transactions)
 }
 
@@ -275,7 +275,7 @@ func (n *Node) MineBlock(block *bck.Block) {
 	//!NOTE semaCurrentlyMiningInc can only be taken by incomingBlock that gets applied
 	//!NOTE In this case the already mined block has higher priority so we cancel mining
 	if !n.semaCurrentlyMiningInc.TryAcquire(1) {
-		n.CancelBlock(block)
+		n.CancelNotAppliedBlock(block)
 		return
 	}
 	defer n.semaCurrentlyMiningInc.Release(1)
@@ -291,7 +291,7 @@ func (n *Node) MineBlock(block *bck.Block) {
 		select {
 		case <-n.stopMiningChan:
 			log.Println("Stopping mining...")
-			n.CancelBlock(block)
+			n.CancelNotAppliedBlock(block)
 			return
 		default: // used to prevent blocking
 		}
@@ -362,6 +362,57 @@ func (n *Node) getNodeInfoById(id int) *NodeInfo {
 	panic("Node.getNodeInfoById() called with invalid id")
 }
 
+func (n *Node) RevertTx(tx *bck.Transaction) {
+	log.Println("Reverting transaction...")
+	n.muRingLock.Lock()
+	UnlockTxParticipants := n.LockTxParticipants(tx)
+	defer UnlockTxParticipants()
+	n.muRingLock.Unlock()
+
+	if tx.SenderAddress != nil {
+		senderAddress := bck.PubKeyToPem(tx.SenderAddress)
+		senderWalletInfo := n.Ring[senderAddress].WInfo
+
+		for _, txIn := range tx.Inputs {
+			senderWalletInfo.Balance += txIn.Amount
+			senderWalletInfo.Utxos.Add(txIn)
+		}
+	}
+	for _, txOut := range tx.Outputs {
+		receiverAddress := bck.PubKeyToPem(txOut.Owner)
+		receiverWalletInfo := n.Ring[receiverAddress].WInfo
+
+		if !receiverWalletInfo.Utxos.Has(txOut) {
+			panic("RevertTx: tried to remove utxo that did not exist in wallet info")
+		}
+		receiverWalletInfo.Utxos.Remove(txOut)
+		receiverWalletInfo.Balance -= txOut.Amount
+
+		if receiverAddress == bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey) {
+			if !n.Wallet.Utxos.Has(txOut) {
+				panic("RevertTx: tried to remove utxo that did not exist in wallet")
+			}
+			n.Wallet.Utxos.Remove(txOut)
+			n.Wallet.Balance -= txOut.Amount
+		}
+	}
+	return
+}
+
+func (n *Node) RevertBlock() {
+	log.Println("Reverting block...")
+	if len(n.Chain) == 0 {
+		return
+	}
+	blockToRemove := n.getLastBlock()
+	log.Println("Trying to revert", len(blockToRemove.Transactions), "transactions")
+	for _, tx := range blockToRemove.Transactions {
+		n.RevertTx(tx)
+	}
+	n.Chain = n.Chain[:len(n.Chain)-1]
+	n.pendingTxs.EnqueueMany(blockToRemove.Transactions)
+}
+
 var (
 	deeperConflictErr = errors.New("deeper conflict")
 )
@@ -376,6 +427,9 @@ func (n *Node) ResolveConflict() error {
 	// TODO: Grab locks
 
 	responses, _ := n.BroadcastByteSlice([]byte{}, chainLengthEndpoint)
+
+	//?DEBUG
+	log.Println(responses)
 
 	for id, res := range responses {
 		if id == n.Id {
@@ -401,6 +455,9 @@ func (n *Node) ResolveConflict() error {
 
 	resolverNodeInfo := n.getNodeInfoById(max_id)
 
+	//?DEBUG
+	log.Println("Resolving conflict. Current chainlen:", len(n.Chain), "resolver chainlen:", max_len)
+
 	endpoint := fmt.Sprintf("/chain-tail/%d", max_len-len(n.Chain)+1)
 	res, err := n.SendByteSlice([]byte{}, resolverNodeInfo.Hostname, resolverNodeInfo.Port, endpointTy(endpoint))
 	if err != nil {
@@ -413,12 +470,13 @@ func (n *Node) ResolveConflict() error {
 		return err
 	}
 
+	//?DEBUG
+	log.Println("Resolving conflict. Received", len(blocks), "blocks")
+
 	//*DONE: Replace last Block of the chain and replace it with blocks
 	//! Note: It assumes that the block before the one we remove is correct.
 	//! Note: Esentially assume max 1 block branches
-	blockToCancel := n.getLastBlock()
-	n.Chain = n.Chain[:len(n.Chain)-1]
-	n.CancelBlock(blockToCancel)
+	n.RevertBlock()
 	for _, block := range blocks {
 		//!NOTE: other way would be to `n.incBlockChan <- block`
 		if err := n.ApplyBlock(block); err != nil && err == chainErr {
@@ -520,6 +578,7 @@ func (n *Node) SelectMinedOrIncomingBlock() {
 		select {
 		case minedBlock := <-n.minedBlockChan:
 			log.Println("Processing mined block...")
+			// n.semaCurrentlyMining.Acquire(context.Background(), 1)
 			n.tryApplyBlockOrResolve(minedBlock)
 			n.BroadcastBlock(minedBlock)
 		case incomingBlock := <-n.incBlockChan:

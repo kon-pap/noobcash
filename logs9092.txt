@@ -1,0 +1,13 @@
+2022/03/31 01:00:33 Connecting to bootstrap...
+2022/03/31 01:00:33 Setting up node server on port 9092 for incoming requests from CLI
+2022/03/31 01:00:33 Setting up block handler...
+2022/03/31 01:00:33 Setting up node server on port 7072 for incoming requests from nodes
+2022/03/31 01:00:33 Assigned id 2
+2022/03/31 01:00:33 Adding node with id: 0 to ring
+2022/03/31 01:00:33 &{0 {"balance":0,"address":"-----BEGIN RSA PUBLIC KEY-----\nMIGJAoGBAMGke252ZweSpzHrMwscITmzQJ+viOjoGF4QKmNtCfr/Cs5d967fYpn7\nev+rTycO8BNzThedepQTC1/TEGOSfJmKDepfWbP51XtBTfG3q1pTQ7mMYR/kFTbB\nIqQjVwcg6cg8fMLIRCz7Fc349d5ACjwFgaVa7l0N2Epi/ImAKp0XAgMBAAE=\n-----END RSA PUBLIC KEY-----\n","utxos":[]} localhost 7070 {0 0}}
+2022/03/31 01:00:33 Adding node with id: 1 to ring
+2022/03/31 01:00:33 &{1 {"balance":0,"address":"-----BEGIN RSA PUBLIC KEY-----\nMIGJAoGBAKUm/ZBGTsNzyBBvyRRJ0L2WHlrFt+2F4dhdPHQV1kQRxEtM/6wzCmkz\nZC7ZpRmIXNKYN3mnYqbFyiLHTca6X0ePbmXBJ02pcE7HYKh7y25QUvfZXg/hDrJI\nZE4oWMwMZIl9BpN3CFcLZmcPEMfNqRO6rRfa56nsnXtbfMxDRq6fAgMBAAE=\n-----END RSA PUBLIC KEY-----\n","utxos":[]} localhost 7071 {0 0}}
+2022/03/31 01:00:33 Incoming node pubkey is already registered: 2
+2022/03/31 01:00:33 Processing received block...
+2022/03/31 01:00:33 Applying new block with 1 transactions
+2022/03/31 01:00:33 Block successfully applied
