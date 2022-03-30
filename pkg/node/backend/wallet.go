@@ -20,6 +20,7 @@ type Wallet struct {
 	Balance int
 	PrivKey *rsa.PrivateKey
 	Utxos   TxOutMap
+	// TODO(ORF): Add a map of reserved TxOuts that cannot be used in new txs but are not removed yet
 }
 type WalletInfo struct {
 	Balance int
@@ -173,11 +174,10 @@ func (t utxoTmpListTy) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 // Chooses utxos from the wallet that are sufficient to pay the amount,
 // removes them from the utxos map, and returns them along with their sum.
 func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxOuts []*TxOut, err error) {
-	tmp := make(utxoTmpListTy, len(w.Utxos))
-	i := 0
+	tmp := make(utxoTmpListTy, 0, len(w.Utxos))
+	// TODO(ORF): Do not use the reserved UTXOS for this.
 	for k, v := range w.Utxos {
-		tmp[i] = utxoTmp{k, v}
-		i++
+		tmp = append(tmp, utxoTmp{k, v})
 	}
 	sort.Sort(tmp)
 	for _, v := range tmp {
@@ -191,6 +191,7 @@ func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxO
 		err = errors.New("not enough money")
 	} else {
 		for _, chosen := range previousTxOuts {
+			// TODO(ORF): Instead of removing them from the UTXOMap, add them to the reserved UTXOs map.
 			w.Utxos.Remove(chosen)
 		}
 		w.Balance -= sum

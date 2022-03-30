@@ -164,6 +164,8 @@ func (n *Node) ApplyTx(tx *bck.Transaction) error {
 			senderWalletInfo.Balance -= previousUtxo.Amount
 			senderWalletInfo.Utxos.Remove(txIn)
 		}
+		// TODO(ORF): Finalize removal by removing the UTXOS from the .Wallet.UTXOS as well.
+		// TODO(ORF): and remove them from the reserved UTXOS too.
 	}
 
 	for _, txOut := range tx.Outputs {
@@ -382,6 +384,7 @@ func (n *Node) RevertTx(tx *bck.Transaction) {
 		receiverAddress := bck.PubKeyToPem(txOut.Owner)
 		receiverWalletInfo := n.Ring[receiverAddress].WInfo
 
+		// TODO(ORF): This invariant (I think) is already certain to be true
 		if !receiverWalletInfo.Utxos.Has(txOut) {
 			panic("RevertTx: tried to remove utxo that did not exist in wallet info")
 		}
@@ -389,6 +392,7 @@ func (n *Node) RevertTx(tx *bck.Transaction) {
 		receiverWalletInfo.Balance -= txOut.Amount
 
 		if receiverAddress == bck.PubKeyToPem(&n.Wallet.PrivKey.PublicKey) {
+			// TODO(ORF): Remove the UTXOS from the reserved UTXOs map, and now this invariant should also be true here
 			if !n.Wallet.Utxos.Has(txOut) {
 				panic("RevertTx: tried to remove utxo that did not exist in wallet")
 			}
