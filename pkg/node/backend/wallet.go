@@ -19,12 +19,13 @@ import (
 type Wallet struct {
 	Balance int
 	PrivKey *rsa.PrivateKey
-	Utxos   map[string]*TxOut
+	Utxos   TxOutMap
+	// TODO(ORF): Add a map of reserved TxOuts that cannot be used in new txs but are not removed yet
 }
 type WalletInfo struct {
 	Balance int
 	PubKey  *rsa.PublicKey
-	Utxos   map[string]*TxOut
+	Utxos   TxOutMap
 }
 
 func NewWallet(bits int) *Wallet {
@@ -35,14 +36,14 @@ func NewWallet(bits int) *Wallet {
 	}
 	return &Wallet{
 		PrivKey: privateKey,
-		Utxos:   map[string]*TxOut{},
+		Utxos:   TxOutMap{},
 	}
 }
 
 func NewWalletInfo(pubKey *rsa.PublicKey) *WalletInfo {
 	return &WalletInfo{
 		PubKey: pubKey,
-		Utxos:  map[string]*TxOut{},
+		Utxos:  TxOutMap{},
 	}
 }
 
@@ -59,11 +60,9 @@ func (w *WalletInfo) MarshalJSON() ([]byte, error) {
 		PubKey  string   `json:"address"`
 		Utxos   []*TxOut `json:"utxos"`
 	}
-	txouts := make([]*TxOut, len(w.Utxos))
-	i := 0
+	txouts := make([]*TxOut, 0, len(w.Utxos))
 	for _, txout := range w.Utxos {
-		txouts[i] = txout
-		i++
+		txouts = append(txouts, txout)
 	}
 	return json.Marshal(printableWallet{
 		Balance: w.Balance,
@@ -175,11 +174,10 @@ func (t utxoTmpListTy) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 // Chooses utxos from the wallet that are sufficient to pay the amount,
 // removes them from the utxos map, and returns them along with their sum.
 func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxOuts []*TxOut, err error) {
-	tmp := make(utxoTmpListTy, len(w.Utxos))
-	i := 0
+	tmp := make(utxoTmpListTy, 0, len(w.Utxos))
+	// TODO(ORF): Do not use the reserved UTXOS for this.
 	for k, v := range w.Utxos {
-		tmp[i] = utxoTmp{k, v}
-		i++
+		tmp = append(tmp, utxoTmp{k, v})
 	}
 	sort.Sort(tmp)
 	for _, v := range tmp {
@@ -193,7 +191,8 @@ func (w *Wallet) selectUTXOsLargestFirst(targetAmount int) (sum int, previousTxO
 		err = errors.New("not enough money")
 	} else {
 		for _, chosen := range previousTxOuts {
-			delete(w.Utxos, chosen.Id)
+			// TODO(ORF): Instead of removing them from the UTXOMap, add them to the reserved UTXOs map.
+			w.Utxos.Remove(chosen)
 		}
 		w.Balance -= sum
 	}
@@ -215,13 +214,13 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 		return nil, err
 	}
 	for _, txOut := range previousTxOuts {
-		tx.Inputs.Add(txOut.Id)
+		tx.Inputs.Add(txOut)
 	}
 	splitedAmount := Splitter(amount)
 	for _, splAmount := range splitedAmount {
 		targetTxOut := NewTxOut(address, splAmount)
 		targetTxOut.ComputeAndFillHash()
-		tx.Outputs[targetTxOut.Id] = targetTxOut
+		tx.Outputs.Add(targetTxOut)
 	}
 
 	changeAmount := sum - amount
@@ -230,7 +229,7 @@ func (w *Wallet) CreateTx(amount int, address *rsa.PublicKey) (*Transaction, err
 		for _, change := range splitChange {
 			changeTxOut := NewTxOut(&w.PrivKey.PublicKey, change)
 			changeTxOut.ComputeAndFillHash()
-			tx.Outputs[changeTxOut.Id] = changeTxOut
+			tx.Outputs.Add(changeTxOut)
 		}
 
 	}
@@ -262,7 +261,7 @@ func (w *Wallet) CreateMultiTargetTx(targets ...*TxTargetTy) (*Transaction, erro
 		return nil, err
 	}
 	for _, txOut := range previousTxOuts {
-		tx.Inputs.Add(txOut.Id)
+		tx.Inputs.Add(txOut)
 	}
 	changeAmount := sum - totalAmount
 	for _, target := range targets {
@@ -270,7 +269,7 @@ func (w *Wallet) CreateMultiTargetTx(targets ...*TxTargetTy) (*Transaction, erro
 		for _, amount := range amountSplited {
 			targetTxOut := NewTxOut(target.Address, amount)
 			targetTxOut.ComputeAndFillHash()
-			tx.Outputs[targetTxOut.Id] = targetTxOut
+			tx.Outputs.Add(targetTxOut)
 		}
 	}
 	if changeAmount > 0 {
@@ -278,7 +277,7 @@ func (w *Wallet) CreateMultiTargetTx(targets ...*TxTargetTy) (*Transaction, erro
 		for _, change := range changeSplit {
 			changeTxOut := NewTxOut(&w.PrivKey.PublicKey, change)
 			changeTxOut.ComputeAndFillHash()
-			tx.Outputs[changeTxOut.Id] = changeTxOut
+			tx.Outputs.Add(changeTxOut)
 		}
 	}
 	tx.ComputeAndFillHash()

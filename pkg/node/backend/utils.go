@@ -2,6 +2,7 @@ package backend
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 )
@@ -19,18 +20,24 @@ func HexDecodeByteSlice(s string) []byte {
 	return b
 }
 
-type InputId string
-type InputSetTy map[InputId]struct{}
+type TxOutMap map[string]*TxOut
 
-func (set InputSetTy) Add(inputId string) {
-	set[InputId(inputId)] = struct{}{}
+func (set *TxOutMap) Add(previousTxOut *TxOut) {
+	(*set)[previousTxOut.Id] = previousTxOut
 }
-func (set InputSetTy) Has(inputId string) bool {
-	_, ok := set[InputId(inputId)]
+func (set *TxOutMap) Has(input *TxOut) bool {
+	_, ok := (*set)[input.Id]
 	return ok
 }
-func (set InputSetTy) Remove(inputId string) {
-	delete(set, InputId(inputId))
+func (set *TxOutMap) Remove(input *TxOut) {
+	delete(*set, input.Id)
+}
+func (set *TxOutMap) MarshalJSON() ([]byte, error) {
+	tmp := (*map[string]*TxOut)(set)
+	return json.Marshal(tmp)
+}
+func (set *TxOutMap) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, (*map[string]*TxOut)(set))
 }
 
 func SplitAmount(amount int, pieces int) (split []int) {

@@ -8,7 +8,8 @@ var bootstrapCmd = &cobra.Command{
 	Use:   "bootstrap",
 	Short: "Run Bootstrap node",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		newNode := setupNode(cmd)
+		newNode, closeFunc := setupNode(cmd)
+		defer closeFunc()
 
 		nodecnt, _ := cmd.Flags().GetInt("nodecnt")
 		newNode.MakeBootstrap(nodecnt)

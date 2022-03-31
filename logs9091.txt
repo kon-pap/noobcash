@@ -1,0 +1,13 @@
+2022/03/31 01:28:20 Connecting to bootstrap...
+2022/03/31 01:28:20 Setting up node server on port 7071 for incoming requests from nodes
+2022/03/31 01:28:20 Setting up node server on port 9091 for incoming requests from CLI
+2022/03/31 01:28:20 Setting up block handler...
+2022/03/31 01:28:20 Assigned id 1
+2022/03/31 01:28:20 Adding node with id: 0 to ring
+2022/03/31 01:28:20 Incoming node pubkey is already registered: 1
+2022/03/31 01:28:20 Processing received block...
+2022/03/31 01:28:20 Applying new block with 1 transactions
+2022/03/31 01:28:20 Block successfully applied
+2022/03/31 01:28:24 Processing received block...
+2022/03/31 01:28:24 Applying new block with 1 transactions
+2022/03/31 01:28:24 Block successfully applied
